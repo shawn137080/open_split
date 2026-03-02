@@ -7,17 +7,18 @@ import sqlite3
 # Resolve database path the same way config.py does, but without importing
 # config so that this module can be tested in isolation (config raises
 # EnvironmentError when TELEGRAM_TOKEN / GEMINI_API_KEY are absent).
-DATABASE_PATH: str = os.getenv("DATABASE_PATH", "auto_split.db")
+DATABASE_PATH: str = os.path.abspath(os.getenv("DATABASE_PATH", "auto_split.db"))
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
 def _connect() -> sqlite3.Connection:
-    """Open a connection with Row factory enabled."""
+    """Open a connection with Row factory and WAL journal mode enabled."""
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
     return conn
 
 
@@ -96,17 +97,20 @@ def create_group(
     timezone: str = "America/Toronto",
     currency: str = "CAD",
 ) -> None:
-    """Create a new household group."""
+    """Create a new household group. Raises ValueError if group already exists."""
     conn = _connect()
     try:
-        conn.execute(
-            """
-            INSERT INTO groups (group_id, household_name, admin_user_id, timezone, currency)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (group_id, household_name, admin_user_id, timezone, currency),
-        )
-        conn.commit()
+        try:
+            conn.execute(
+                """
+                INSERT INTO groups (group_id, household_name, admin_user_id, timezone, currency)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (group_id, household_name, admin_user_id, timezone, currency),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            raise ValueError(f"Group '{group_id}' already exists.")
     finally:
         conn.close()
 
@@ -173,7 +177,10 @@ def add_member(
             (group_id, name, telegram_user_id, 1 if is_admin else 0),
         )
         conn.commit()
-        member_id: int = cursor.lastrowid  # type: ignore[assignment]
+        row_id = cursor.lastrowid
+        if row_id is None:
+            raise RuntimeError("INSERT into members did not produce a row id")
+        member_id: int = row_id
     finally:
         conn.close()
     return member_id
@@ -222,9 +229,13 @@ def get_member_by_telegram_id(group_id: str, telegram_user_id: str) -> dict | No
 
 
 def remove_member(member_id: int) -> None:
-    """Delete a member by id."""
+    """Delete a member by id. Deactivates their fixed expenses first to avoid FK violations."""
     conn = _connect()
     try:
+        conn.execute(
+            "UPDATE fixed_expenses SET active = 0 WHERE paid_by_member_id = ?",
+            (member_id,),
+        )
         conn.execute("DELETE FROM members WHERE id = ?", (member_id,))
         conn.commit()
     finally:
@@ -253,7 +264,10 @@ def add_fixed_expense(
             (group_id, description, amount, paid_by_member_id, split_type),
         )
         conn.commit()
-        expense_id: int = cursor.lastrowid  # type: ignore[assignment]
+        row_id = cursor.lastrowid
+        if row_id is None:
+            raise RuntimeError("INSERT into fixed_expenses did not produce a row id")
+        expense_id: int = row_id
     finally:
         conn.close()
     return expense_id
