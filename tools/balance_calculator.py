@@ -17,7 +17,7 @@ CURRENCY_SYMBOLS: dict[str, str] = {
     "AUD": "$",
 }
 
-_NEAR_ZERO = 0.005  # threshold for treating a balance as settled
+_NEAR_ZERO = 0.01  # threshold for treating a balance as settled (spec: within 0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +241,7 @@ def parse_member_shares(
     )
     if except_match:
         excluded_raw = except_match.group(1).strip().lower()
-        excluded = _resolve_name(excluded_raw, member_lower, None)
+        excluded = _resolve_name(excluded_raw, member_lower, sender_canon)
         if excluded:
             recipients = [m for m in members if m != excluded]
         else:
