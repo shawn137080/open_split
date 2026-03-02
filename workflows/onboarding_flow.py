@@ -158,8 +158,12 @@ async def _finalize_setup(
         paid_by_name: str = fe["paid_by"]
         paid_by_id: Optional[int] = member_id_map.get(paid_by_name.lower())
         if paid_by_id is None:
-            # Fall back to first member if payer name not recognised
-            paid_by_id = next(iter(member_id_map.values()))
+            import logging
+            logging.warning(
+                "Fixed expense '%s': paid_by '%s' not found in members %s — skipping.",
+                fe["description"], paid_by_name, list(member_id_map.keys()),
+            )
+            continue  # skip rather than silently misattribute
         database.add_fixed_expense(
             group_id=group_id,
             description=fe["description"],
@@ -343,8 +347,8 @@ async def handle_onboarding_message(
             return
 
         ctx["sheet_id"] = sheet_id
-        database.set_state(user_id, group_id, STATE_COMPLETE, ctx)
-
+        # Do not set STATE_COMPLETE here — _finalize_setup owns the state transition
+        # and calls clear_state() as its final step.
         await _finalize_setup(update, context, user_id, group_id, ctx)
         return
 
@@ -485,8 +489,6 @@ async def handle_onboarding_callback(
             return
 
         ctx["sheet_id"] = sheet_id
-        database.set_state(user_id, group_id, STATE_COMPLETE, ctx)
-
         await _finalize_setup(update, context, user_id, group_id, ctx)
         return
 
