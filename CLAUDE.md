@@ -52,19 +52,31 @@ This loop is how the framework improves over time.
 ## File Structure
 
 **What goes where:**
-- **Deliverables**: Final outputs go to cloud services (Google Sheets, Slides, etc.) where I can access them directly
+- **Data**: All expense data stored locally in `auto_split.db` (SQLite)
 - **Intermediates**: Temporary processing files that can be regenerated
 
 **Directory layout:**
 ```
-.tmp/           # Temporary files (scraped data, intermediate exports). Regenerated as needed.
-tools/          # Python scripts for deterministic execution
-workflows/      # Markdown SOPs defining what to do and how
-.env            # API keys and environment variables (NEVER store secrets anywhere else)
-credentials.json, token.json  # Google OAuth (gitignored)
+main.py               # Bot entry point, registers all handlers
+database.py           # SQLite schema, init, and all CRUD helpers
+config.py             # Env var loading (TELEGRAM_TOKEN, GEMINI_API_KEY)
+tools/
+  expense_store.py    # Storage abstraction layer (wraps database.py)
+  balance_calculator.py  # Balance math and settlement formatting
+  receipt_extractor.py   # Gemini Vision OCR for receipts
+  input_parser.py        # Text parsing utilities
+workflows/
+  onboarding_flow.py     # /start wizard (household name, members, fixed costs)
+  manual_expense_flow.py # /add and /expense commands
+  receipt_flow.py        # Photo receipt scan + split flow
+  summary_flow.py        # /summary, /history, /last, /settle, /delete
+  export_flow.py         # /export CSV generation
+.env                  # API keys (TELEGRAM_TOKEN, GEMINI_API_KEY)
+.env.example          # Template — copy to .env to get started
+requirements.txt      # pip dependencies
 ```
 
-**Core principle:** Local files are just for processing. Anything I need to see or use lives in cloud services. Everything in `.tmp/` is disposable.
+**Core principle:** All data lives in SQLite locally. No external services required beyond Telegram and Gemini (for OCR).
 
 ## Bottom Line
 

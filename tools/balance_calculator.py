@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import html
 import re
 
 # ---------------------------------------------------------------------------
@@ -87,48 +88,68 @@ def format_balance_summary(
     currency: str = "CAD",
 ) -> str:
     """
-    Format balances as a Telegram-ready summary message.
+    Format balances as a mobile-friendly HTML card layout.
 
     Example output:
-        📊 March 2026 — Expense Summary
+        📊 <b>Feb 2026 — Summary</b>
 
-        👤 Karlos: paid $423.00 | owed $312.50 | net +$110.50
-        👤 Partner: paid $210.00 | owed $312.50 | net -$102.50
+        👤 <b>Sean</b>
+          Paid: $424.02 · Owed: $291.00 · Net: <b>+$133.02</b>
 
-        💸 Settlement: Partner → Karlos $102.50
+        👤 <b>Mike</b>
+          Paid: $153.62 · Owed: $291.00 · Net: <b>-$137.38</b>
 
-        (If balanced: "✅ All square! No transfers needed.")
+        💸 <b>Settlement</b>
+          Mike → Sean $137.38
     """
     sym: str = CURRENCY_SYMBOLS.get(currency.upper(), "$")
 
     lines: list[str] = []
-    lines.append(f"📊 {month_label} — Expense Summary")
-    lines.append("")
+    lines.append(f"📊 <b>{html.escape(month_label)} — Summary</b>")
 
     for entry in balances:
-        paid_fmt = f"{sym}{entry['total_paid']:.2f}"
-        owed_fmt = f"{sym}{entry['total_owed']:.2f}"
-        net = entry["net_balance"]
-        sign = "+" if net >= 0 else "-"
-        net_fmt = f"{sign}{sym}{abs(net):.2f}"
+        net_val = entry["net_balance"]
+        sign = "+" if net_val >= 0 else "-"
+        net_str = f"{sign}{sym}{abs(net_val):.2f}"
         lines.append(
-            f"👤 {entry['member']}: paid {paid_fmt} | owed {owed_fmt} | net {net_fmt}"
+            f"\n👤 <b>{html.escape(entry['member'])}</b>\n"
+            f"  Paid: {sym}{entry['total_paid']:.2f} · "
+            f"Owed: {sym}{entry['total_owed']:.2f} · "
+            f"Net: <b>{net_str}</b>"
         )
-
-    lines.append("")
 
     transfers = compute_settlement(balances)
     if not transfers:
-        lines.append("✅ All square! No transfers needed.")
+        lines.append("\n✅ All square! No transfers needed.")
     else:
-        settlement_parts: list[str] = []
+        lines.append("\n💸 <b>Settlement</b>")
         for t in transfers:
-            settlement_parts.append(
-                f"{t['from']} → {t['to']} {sym}{t['amount']:.2f}"
+            lines.append(
+                f"  {html.escape(t['from'])} → {html.escape(t['to'])} {sym}{t['amount']:.2f}"
             )
-        lines.append("💸 Settlement: " + " | ".join(settlement_parts))
 
     return "\n".join(lines)
+
+
+def format_category_breakdown(expenses: list[dict], currency: str = "CAD") -> str:
+    """
+    Return a one-line category breakdown, e.g.:
+        📂 <b>By Category</b>  Grocery $187 · Dining $254 · Transport $62
+    Returns empty string if no categorised expenses.
+    Excludes Settlement rows.
+    """
+    sym: str = CURRENCY_SYMBOLS.get(currency.upper(), "$")
+    totals: dict[str, float] = {}
+    for e in expenses:
+        cat: str = (e.get("category") or "Other").strip()
+        if cat == "Settlement":
+            continue
+        totals[cat] = totals.get(cat, 0.0) + float(e.get("total", 0.0))
+    if not totals:
+        return ""
+    sorted_cats = sorted(totals.items(), key=lambda x: -x[1])
+    parts = [f"{html.escape(cat)} {sym}{amt:.0f}" for cat, amt in sorted_cats]
+    return "📂 <b>By Category</b>\n  " + " · ".join(parts)
 
 
 def compute_settlement(balances: list[dict]) -> list[dict]:

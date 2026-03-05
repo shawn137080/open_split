@@ -11,7 +11,7 @@ from google.genai import types
 from config import GEMINI_API_KEY
 
 _client = genai.Client(api_key=GEMINI_API_KEY)
-_MODEL = "gemini-2.0-flash"
+_MODEL = "gemini-2.5-flash"
 
 _PROMPT = """You are a receipt OCR assistant. Extract all information from this receipt image and return ONLY a valid JSON object with NO markdown formatting.
 
@@ -19,14 +19,14 @@ Return this exact JSON structure:
 {
   "merchant": "store name or null",
   "date": "YYYY-MM-DD or null if unclear",
-  "category": "one of: Grocery, Dining, Transport, Utilities, Health, Entertainment, Shopping, Other",
+  "category": "one of: Grocery, Dining, Transport, Utilities, Health, Entertainment, Shopping, Other — pick based on merchant context: restaurants/cafes/bars/food courts→Dining; supermarkets/wholesale/food stores→Grocery; gas stations/parking/transit/rideshare/auto→Transport; phone/internet/electricity/water/rent→Utilities; pharmacy/clinic/gym/optician→Health; movies/streaming/games/events→Entertainment; clothing/electronics/gifts/hardware→Shopping; anything else→Other",
   "subtotal": number or null,
   "hst_amount": number or null,
   "hst_pct": number or null,
   "tip_amount": number or null,
   "tip_pct": number or null,
   "total": number or null,
-  "items": [{"name": "item name", "price": number or null, "quantity": number or null}],
+  "items": [{"name": "item name", "price": number or null, "quantity": number or null, "taxable": true or false}],
   "currency": "CAD",
   "confidence": "high/medium/low"
 }
@@ -38,6 +38,12 @@ Rules:
 - If receipt is in another language, still extract numbers and translate merchant name if possible
 - Items list can be empty [] if items are not visible
 - Set confidence to "low" if image is blurry or hard to read
+- TAXABLE INDICATOR: Set taxable: true if the item has an "H" marker (HST applies). On Canadian receipts "H" appears next to the price.
+- DISCOUNTS — CRITICAL: If a price ends with a minus sign ("3.00-") or starts with minus ("-3.00"), it is a DISCOUNT. Set its price as a NEGATIVE number (e.g. -3.00). Never treat a discount as a positive item.
+- Items whose code starts with "TPD/" are coupon/discount redemption lines — ALWAYS set their price as NEGATIVE.
+- Items labelled "DISCOUNT", "COUPON", "SAVINGS", "MEMBER SAVINGS", or similar are discounts — ALWAYS set price as NEGATIVE.
+- The "H" flag on a discount line (e.g. "3.00- H") means pre-tax discount; still set price as negative.
+- Do NOT include subtotal, tax, total, payment method, or store header lines as items.
 """
 
 # Data fields that, when None, count as failed extractions

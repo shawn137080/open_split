@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 from datetime import datetime
 from typing import Optional
@@ -17,12 +18,11 @@ from tools.balance_calculator import (
     parse_member_shares,
 )
 from tools.receipt_extractor import extract_receipt, format_extraction_for_display
-from tools.sheets_manager import (
-    append_expense_row,
+from tools.expense_store import (
+    append_expense,
     get_month_expenses,
     get_next_expense_id,
-    get_or_create_month_tab,
-    update_summary_tab,
+    get_or_create_month,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ STATE_RECEIPT_AWAITING_PAYER = "RECEIPT_AWAITING_PAYER"
 STATE_RECEIPT_AWAITING_SPLIT = "RECEIPT_AWAITING_SPLIT"
 STATE_RECEIPT_AWAITING_ASSIGNMENT = "RECEIPT_AWAITING_ASSIGNMENT"
 STATE_RECEIPT_AWAITING_SAVE_CONFIRM = "RECEIPT_AWAITING_SAVE_CONFIRM"
+STATE_RECEIPT_ITEM_ASSIGN = "RECEIPT_ITEM_ASSIGN"
 
 # States used in the manual-entry path (unreadable receipt)
 STATE_RECEIPT_MANUAL_MERCHANT = "RECEIPT_MANUAL_MERCHANT"
@@ -50,6 +51,7 @@ RECEIPT_STATES = {
     STATE_RECEIPT_AWAITING_SPLIT,
     STATE_RECEIPT_AWAITING_ASSIGNMENT,
     STATE_RECEIPT_AWAITING_SAVE_CONFIRM,
+    STATE_RECEIPT_ITEM_ASSIGN,
     STATE_RECEIPT_MANUAL_MERCHANT,
     STATE_RECEIPT_MANUAL_AMOUNT,
     STATE_RECEIPT_MANUAL_DATE,
@@ -70,6 +72,12 @@ CB_SPLIT_EQUAL = "receipt:split_equal"
 CB_SPLIT_ASSIGN = "receipt:split_assign"
 CB_SAVE = "receipt:save"
 CB_REASSIGN = "receipt:reassign"
+CB_ASSIGN_ITEM_PREFIX = "receipt:item:"   # receipt:item:{item_idx}:{member_idx or "s"}
+CB_ASSIGN_SUBMIT = "receipt:item_done"    # note: underscore, not colon — won't match prefix
+CB_CATEGORY_MENU = "receipt:catmenu"
+CB_CAT_PREFIX = "receipt:cat:"           # receipt:cat:Dining  (won't match item: prefix)
+CB_CAT_BACK = "receipt:catback"
+CB_VIEW_EXPENSE = "receipt:view:"        # receipt:view:<expense_id>
 
 
 # ---------------------------------------------------------------------------
@@ -77,13 +85,30 @@ CB_REASSIGN = "receipt:reassign"
 # ---------------------------------------------------------------------------
 
 
-def _confirm_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [[
-            InlineKeyboardButton("Confirm data", callback_data=CB_CONFIRM),
-            InlineKeyboardButton("Edit a field", callback_data=CB_EDIT),
-        ]]
-    )
+_CATEGORIES = [
+    "Grocery", "Dining", "Transport", "Utilities",
+    "Health", "Entertainment", "Shopping", "Other",
+]
+
+
+def _confirm_keyboard(category: str | None = None) -> InlineKeyboardMarkup:
+    cat_label = f"📁 {category}" if category else "📁 Set Category"
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Confirm", callback_data=CB_CONFIRM),
+            InlineKeyboardButton("✏️ Edit", callback_data=CB_EDIT),
+        ],
+        [InlineKeyboardButton(cat_label, callback_data=CB_CATEGORY_MENU)],
+    ])
+
+
+def _category_keyboard() -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(c, callback_data=f"{CB_CAT_PREFIX}{c}") for c in _CATEGORIES[i:i+3]]
+        for i in range(0, len(_CATEGORIES), 3)
+    ]
+    rows.append([InlineKeyboardButton("← Back", callback_data=CB_CAT_BACK)])
+    return InlineKeyboardMarkup(rows)
 
 
 def _month_keyboard(receipt_month: str) -> InlineKeyboardMarkup:
@@ -146,6 +171,11 @@ def _cancel_keyboard() -> InlineKeyboardMarkup:
 # Helper utilities
 # ---------------------------------------------------------------------------
 
+_NUM_EMOJIS = [
+    "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
+    "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳",
+]
+
 
 def _get_month_label(
     dt: datetime, timezone: str = "America/Toronto"
@@ -182,25 +212,25 @@ def _parse_receipt_month(date_str: Optional[str], timezone: str = "America/Toron
         tz = pytz.timezone(timezone)
         dt_aware = tz.localize(dt)
         return _get_month_label(dt_aware, timezone)
-    except (ValueError, Exception):
+    except Exception:
         return None
 
 
 def _is_duplicate(
-    sheet_id: str,
+    group_id: str,
     month_label: str,
     merchant: Optional[str],
     total: Optional[float],
     date_str: Optional[str],
 ) -> bool:
     """
-    Check if an expense with same merchant+total+date already exists in the sheet.
+    Check if an expense with same merchant+total+date already exists in the DB.
     Returns False on any error (safe default).
     """
-    if not sheet_id or not merchant or total is None or not date_str:
+    if not group_id or not merchant or total is None or not date_str:
         return False
     try:
-        expenses = get_month_expenses(sheet_id, month_label)
+        expenses = database.get_expenses(group_id, month_label)
     except Exception:
         return False
 
@@ -224,15 +254,16 @@ def _format_items_text(items: list[dict]) -> str:
     if not items:
         return ""
     lines = ["Items detected:"]
-    number_emojis = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"]
     for i, item in enumerate(items):
         name = item.get("name", "Item")
         price = item.get("price")
-        num = number_emojis[i] if i < len(number_emojis) else f"{i + 1}."
+        taxable = item.get("taxable", False)
+        num = _NUM_EMOJIS[i] if i < len(_NUM_EMOJIS) else f"{i + 1}."
+        tax_tag = " H" if taxable else ""
         if price is not None:
-            lines.append(f"{num} {name} ${float(price):.2f}")
+            lines.append(f"{num} {name} ${float(price):.2f}{tax_tag}")
         else:
-            lines.append(f"{num} {name}")
+            lines.append(f"{num} {name}{tax_tag}")
     return "\n".join(lines)
 
 
@@ -257,6 +288,148 @@ def _format_split_summary(member_shares: dict) -> str:
     return "\n".join(lines)
 
 
+def _item_assign_keyboard(
+    items: list[dict],
+    member_names: list[str],
+    assignments: dict,
+) -> InlineKeyboardMarkup:
+    """Build per-item assignment keyboard.
+
+    assignments: {str(item_idx): int(member_idx) | "s"} — "s" means split equally.
+    The selected choice shows a checkmark prefix.
+    """
+    rows: list[list[InlineKeyboardButton]] = []
+    for i, _item in enumerate(items):
+        num = _NUM_EMOJIS[i] if i < len(_NUM_EMOJIS) else f"{i + 1}."
+        current = assignments.get(str(i))
+        buttons: list[InlineKeyboardButton] = []
+        for j, name in enumerate(member_names):
+            check = "✓" if current == j else ""
+            buttons.append(InlineKeyboardButton(
+                f"{check}{name}",
+                callback_data=f"receipt:item:{i}:{j}",
+            ))
+        share_check = "✓" if current == "s" else ""
+        buttons.append(InlineKeyboardButton(
+            f"{share_check}Share",
+            callback_data=f"receipt:item:{i}:s",
+        ))
+        rows.append(buttons)
+
+    assigned = sum(1 for v in assignments.values() if v is not None)
+    rows.append([InlineKeyboardButton(
+        f"✅ Submit ({assigned}/{len(items)} assigned)",
+        callback_data=CB_ASSIGN_SUBMIT,
+    )])
+    rows.append([InlineKeyboardButton("Cancel", callback_data=CB_CANCEL)])
+    return InlineKeyboardMarkup(rows)
+
+
+def _build_item_assign_text(
+    items: list[dict],
+    member_names: list[str],
+    assignments: dict,
+) -> str:
+    """Build message text showing all items with current assignment status."""
+    lines = ["Select who paid for each item:"]
+    for i, item in enumerate(items):
+        num = _NUM_EMOJIS[i] if i < len(_NUM_EMOJIS) else f"{i + 1}."
+        name = item.get("name") or f"Item {i + 1}"
+        price = item.get("price")
+        taxable = item.get("taxable", False)
+        price_str = f" ${float(price):.2f}" if price is not None else ""
+        tax_tag = " H" if taxable else ""
+        current = assignments.get(str(i))
+        if current is None:
+            tag = ""
+        elif current == "s":
+            tag = " — Share"
+        elif isinstance(current, int) and 0 <= current < len(member_names):
+            tag = f" — {member_names[current]}"
+        else:
+            tag = ""
+        lines.append(f"{num} {name}{price_str}{tax_tag}{tag}")
+    return "\n".join(lines)
+
+
+def _assignments_to_shares(
+    items: list[dict],
+    assignments: dict,
+    member_names: list[str],
+    total: float,
+    hst_pct: Optional[float] = None,
+) -> dict:
+    """Convert per-item assignments to member_shares, scaled to the receipt total.
+
+    assignments: {str(item_idx): int(member_idx) | "s" | None}
+    Unassigned and "s" items are split equally.
+    Items marked taxable get their price multiplied by (1 + hst_pct/100).
+    The result is proportionally scaled so shares sum to total.
+    """
+    n = len(member_names)
+    if n == 0:
+        return {}
+
+    hst_mult = 1.0 + (hst_pct / 100.0) if hst_pct else 1.0
+    shares: dict[str, float] = {m: 0.0 for m in member_names}
+
+    for idx, item in enumerate(items):
+        price = float(item.get("price") or 0.0)
+        taxable = bool(item.get("taxable", False))
+        effective = price * hst_mult if taxable else price
+
+        current = assignments.get(str(idx))
+        if current is None or current == "s":
+            per = effective / n
+            for m in member_names:
+                shares[m] += per
+        elif isinstance(current, int) and 0 <= current < n:
+            shares[member_names[current]] += effective
+
+    item_sum = sum(shares.values())
+    if item_sum <= 0.0:
+        return _equal_split(member_names, total)
+
+    # Scale proportionally to actual total (absorbs HST on non-taxable items, coupons, etc.)
+    if total > 0.0:
+        scale = total / item_sum
+        shares = {m: v * scale for m, v in shares.items()}
+
+    # Round to 2 dp and fix any penny rounding difference
+    shares = {m: round(v, 2) for m, v in shares.items()}
+    diff = round(total - sum(shares.values()), 2)
+    if diff != 0.0:
+        shares[member_names[0]] = round(shares[member_names[0]] + diff, 2)
+
+    return shares
+
+
+async def _ask_item_assign(
+    update: Update,
+    group_id: str,
+    user_id: str,
+    ctx: dict,
+) -> None:
+    """Transition to RECEIPT_ITEM_ASSIGN and show per-item button keyboard."""
+    extracted = ctx.get("extracted", {})
+    items = extracted.get("items") or []
+    members_data = database.get_members(group_id)
+    member_names = [m["name"] for m in members_data]
+
+    ctx["_member_names"] = member_names
+    ctx["item_assignments"] = {}
+    database.set_state(user_id, group_id, STATE_RECEIPT_ITEM_ASSIGN, ctx)
+
+    text = _build_item_assign_text(items, member_names, {})
+    keyboard = _item_assign_keyboard(items, member_names, {})
+
+    query = update.callback_query
+    if query:
+        await query.edit_message_text(text, reply_markup=keyboard)
+    elif update.effective_message:
+        await update.effective_message.reply_text(text, reply_markup=keyboard)
+
+
 def _get_fixed_expenses_for_sheet(group_id: str, members: list[str]) -> list[dict]:
     """
     Build the fixed_expenses list in the format expected by get_or_create_month_tab.
@@ -264,17 +437,14 @@ def _get_fixed_expenses_for_sheet(group_id: str, members: list[str]) -> list[dic
     """
     db_fixed = database.get_fixed_expenses(group_id)
     result = []
+    # Fetch member list once — avoid N round-trips for N fixed expenses
+    all_members = database.get_members(group_id)
+    member_id_to_name: dict = {m["id"]: m.get("name", "") for m in all_members}
     for fe in db_fixed:
         amount = float(fe.get("amount", 0.0))
         # Look up the member name from paid_by_member_id
         paid_by_member_id = fe.get("paid_by_member_id")
-        paid_by_name = ""
-        if paid_by_member_id:
-            all_members = database.get_members(group_id)
-            for m in all_members:
-                if m.get("id") == paid_by_member_id:
-                    paid_by_name = m.get("name", "")
-                    break
+        paid_by_name = member_id_to_name.get(paid_by_member_id, "") if paid_by_member_id else ""
 
         split_type = fe.get("split_type", "equal")
         # Build member_shares: equal split or assigned to one person
@@ -308,7 +478,7 @@ def _get_fixed_expenses_for_sheet(group_id: str, members: list[str]) -> list[dic
 
 def is_receipt_state(user_id: str, group_id: str) -> bool:
     """Return True if user has an active receipt processing state."""
-    state, _ = database.get_state(user_id, group_id)
+    _sr2 = database.get_state(user_id, group_id); state = _sr2.get("state") if _sr2 else None
     return state in RECEIPT_STATES
 
 
@@ -337,7 +507,7 @@ async def handle_photo(
         return
 
     # Edge case 3: sequential processing guard
-    existing_state, _ = database.get_state(user_id, group_id)
+    _sr3 = database.get_state(user_id, group_id); existing_state = _sr3.get("state") if _sr3 else None
     if existing_state in RECEIPT_STATES:
         await update.effective_message.reply_text(
             "I'm still processing your previous receipt. "
@@ -435,15 +605,15 @@ async def handle_photo(
         return
 
     # No month mismatch — check for duplicates
-    sheet_id = group.get("sheet_id")
-    if sheet_id and receipt_date:
+    receipt_date = extracted.get("date")
+    if receipt_date:
         merchant = extracted.get("merchant")
-        total = extracted.get("total")
-        if _is_duplicate(sheet_id, today_month, merchant, total, receipt_date):
+        total_val = extracted.get("total")
+        if _is_duplicate(group_id, today_month, merchant, total_val, receipt_date):
             database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx)
             await processing_msg.edit_text(
                 f"{display_text}\n\n"
-                f"Possible duplicate: {merchant} ${total:.2f} already saved. "
+                f"Possible duplicate: {merchant} ${total_val:.2f} already saved. "
                 f"Save anyway?",
                 reply_markup=_duplicate_keyboard(),
             )
@@ -453,7 +623,7 @@ async def handle_photo(
     database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx)
     await processing_msg.edit_text(
         display_text,
-        reply_markup=_confirm_keyboard(),
+        reply_markup=_confirm_keyboard(ctx.get("extracted", {}).get("category") if ctx else None),
     )
 
 
@@ -557,21 +727,18 @@ async def _do_save(
     ctx: dict,
 ) -> None:
     """
-    Perform the actual save:
-    1. get_or_create_month_tab
+    Perform the actual save to local SQLite:
+    1. get_or_create_month (seeds fixed expenses)
     2. get_next_expense_id
-    3. append_expense_row
-    4. get_month_expenses
-    5. calculate_balances
-    6. update_summary_tab
-    7. Show success + balance summary
-    8. clear_state
+    3. append_expense
+    4. get_month_expenses → calculate_balances
+    5. Show success + balance summary
+    6. clear_state
     """
     group = database.get_group(group_id)
     if group is None:
         return
 
-    sheet_id = group.get("sheet_id", "")
     timezone = group.get("timezone", "America/Toronto")
     currency = group.get("currency", "CAD")
 
@@ -585,24 +752,20 @@ async def _do_save(
 
     # Determine the date to use
     receipt_date = extracted.get("date") or _today_date_str(timezone)
-    # If user chose "use today's date", ctx["extracted"]["date"] was already updated
 
     query = update.callback_query
 
     try:
-        # Step 1: ensure month tab exists
-        fixed_expenses = _get_fixed_expenses_for_sheet(group_id, member_names)
-        get_or_create_month_tab(
-            sheet_id=sheet_id,
+        # Step 1: ensure month is initialised (seeds fixed expenses)
+        get_or_create_month(
+            group_id=group_id,
             month_label=month_label,
             members=member_names,
-            fixed_expenses=fixed_expenses,
+            fixed_expenses=[],
         )
 
-        # Step 2: get next expense ID
-        expense_id = get_next_expense_id(sheet_id, month_label)
-
-        # Step 3: append expense row
+        # Steps 2+3: get ID and save expense
+        expense_id = get_next_expense_id(group_id, month_label)
         expense_row = {
             "expense_id": expense_id,
             "date": receipt_date,
@@ -618,44 +781,34 @@ async def _do_save(
             "member_shares": member_shares,
             "notes": "",
         }
-        append_expense_row(
-            sheet_id=sheet_id,
-            month_label=month_label,
-            members=member_names,
-            expense=expense_row,
-        )
+        append_expense(group_id=group_id, month_label=month_label, expense=expense_row)
 
-        # Steps 4 + 5: get all expenses and calculate balances
-        all_expenses = get_month_expenses(sheet_id, month_label)
+        # Step 4: calculate balances
+        all_expenses = get_month_expenses(group_id, month_label)
         balances = calculate_balances(all_expenses, member_names)
 
-        # Step 6: update summary tab
-        update_summary_tab(
-            sheet_id=sheet_id,
-            members=member_names,
-            month_label=month_label,
-            balances=balances,
-        )
-
-        # Step 7: show success + balance summary
+        # Step 5: show success + balance summary
         balance_text = format_balance_summary(balances, month_label, currency=currency)
-        success_msg = f"Saved! #{expense_id}\n\n{balance_text}"
+        success_msg = f"✅ <b>Saved!</b> #{html.escape(expense_id)}\n\n{balance_text}"
+        view_kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("📋 View expense", callback_data=f"{CB_VIEW_EXPENSE}{expense_id}"),
+        ]])
 
         if query:
-            await query.edit_message_text(success_msg)
+            await query.edit_message_text(success_msg, parse_mode="HTML", reply_markup=view_kb)
         elif update.effective_message:
-            await update.effective_message.reply_text(success_msg)
+            await update.effective_message.reply_text(success_msg, parse_mode="HTML", reply_markup=view_kb)
 
     except Exception as exc:
         logger.exception("Failed to save expense: %s", exc)
         err_msg = (
-            "Something went wrong saving the expense.\n"
-            f"Error: {exc}\n\nPlease try again."
+            "⚠️ <b>Something went wrong</b>\n"
+            f"{html.escape(str(exc))}\n\nPlease try again."
         )
         if query:
-            await query.edit_message_text(err_msg)
+            await query.edit_message_text(err_msg, parse_mode="HTML")
         elif update.effective_message:
-            await update.effective_message.reply_text(err_msg)
+            await update.effective_message.reply_text(err_msg, parse_mode="HTML")
 
     # Step 8: clear state regardless of success/failure
     database.clear_state(user_id, group_id)
@@ -679,9 +832,11 @@ async def handle_receipt_message(
     user_id = str(update.effective_user.id)
     text = update.effective_message.text.strip()
 
-    state, ctx = database.get_state(user_id, group_id)
+    _sr = database.get_state(user_id, group_id); state = _sr.get("state") if _sr else None; ctx = _sr.get("context") if _sr else None
 
-    if state not in RECEIPT_STATES or ctx is None:
+    if state not in RECEIPT_STATES:
+        return
+    if ctx is None:
         return
 
     # ------------------------------------------------------------------
@@ -756,7 +911,7 @@ async def handle_receipt_message(
         database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx)
         await update.effective_message.reply_text(
             display,
-            reply_markup=_confirm_keyboard(),
+            reply_markup=_confirm_keyboard(ctx.get("extracted", {}).get("category") if ctx else None),
         )
         return
 
@@ -791,14 +946,71 @@ async def handle_receipt_message(
         return
 
     # ------------------------------------------------------------------
-    # Text received when bot expects a button press: re-prompt
+    # Text received when awaiting confirmation — may be an edit reply
     # ------------------------------------------------------------------
     if state == STATE_RECEIPT_AWAITING_CONFIRM:
+        if ctx.get("_awaiting_edit"):
+            # Parse "field: value" edits
+            if ":" in text:
+                field_raw, _, value_raw = text.partition(":")
+                field = field_raw.strip().lower()
+                value = value_raw.strip()
+                extracted = ctx.get("extracted", {})
+                valid_fields = {"merchant", "date", "total", "category"}
+                if field in valid_fields:
+                    if field == "total":
+                        try:
+                            extracted["total"] = float(
+                                value.replace("$", "").replace(",", ".").strip()
+                            )
+                        except ValueError:
+                            await update.effective_message.reply_text(
+                                "Invalid total amount. Try again:\n  total: 52.30",
+                                reply_markup=_cancel_keyboard(),
+                            )
+                            return
+                    elif field == "date":
+                        try:
+                            datetime.strptime(value, "%Y-%m-%d")
+                            extracted["date"] = value
+                        except ValueError:
+                            await update.effective_message.reply_text(
+                                "Invalid date. Use YYYY-MM-DD:\n  date: 2026-03-01",
+                                reply_markup=_cancel_keyboard(),
+                            )
+                            return
+                    else:
+                        extracted[field] = value
+                    ctx["extracted"] = extracted
+                    ctx["_awaiting_edit"] = False
+                    display = format_extraction_for_display(extracted)
+                    database.set_state(
+                        user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx
+                    )
+                    await update.effective_message.reply_text(
+                        display, reply_markup=_confirm_keyboard(ctx.get("extracted", {}).get("category") if ctx else None)
+                    )
+                    return
+                else:
+                    await update.effective_message.reply_text(
+                        f"Unknown field '{field_raw.strip()}'. "
+                        "Valid fields: merchant, date, total, category.",
+                        reply_markup=_cancel_keyboard(),
+                    )
+                    return
+            else:
+                await update.effective_message.reply_text(
+                    "Use format: field: new value\nExample: merchant: Costco",
+                    reply_markup=_cancel_keyboard(),
+                )
+                return
+
+        # Not in edit mode — re-prompt with data and confirm buttons
         extracted = ctx.get("extracted", {})
         display = format_extraction_for_display(extracted)
         await update.effective_message.reply_text(
             f"{display}\n\nPlease use the buttons above.",
-            reply_markup=_confirm_keyboard(),
+            reply_markup=_confirm_keyboard(ctx.get("extracted", {}).get("category") if ctx else None),
         )
         return
 
@@ -824,6 +1036,18 @@ async def handle_receipt_message(
         await update.effective_message.reply_text(
             f"Here's the split:\n{split_text}\n\nPlease use the buttons.",
             reply_markup=_save_keyboard(),
+        )
+        return
+
+    if state == STATE_RECEIPT_ITEM_ASSIGN:
+        extracted = ctx.get("extracted", {})
+        items = extracted.get("items") or []
+        member_names = ctx.get("_member_names") or [m["name"] for m in database.get_members(group_id)]
+        assignments = ctx.get("item_assignments", {})
+        assign_text = _build_item_assign_text(items, member_names, assignments)
+        await update.effective_message.reply_text(
+            f"{assign_text}\n\nPlease use the buttons above to assign items.",
+            reply_markup=_item_assign_keyboard(items, member_names, assignments),
         )
         return
 
@@ -853,9 +1077,49 @@ async def handle_receipt_callback(
     if not data.startswith("receipt:"):
         return
 
-    state, ctx = database.get_state(user_id, group_id)
+    # ------------------------------------------------------------------
+    # View expense (post-save, no active flow required)
+    # ------------------------------------------------------------------
+    if data.startswith(CB_VIEW_EXPENSE):
+        eid = data[len(CB_VIEW_EXPENSE):]
+        group = database.get_group(group_id)
+        currency = (group.get("currency") or "CAD") if group else "CAD"
+        sym = "$"
+        # Search all months for this expense_id
+        found_exp = None
+        for m in database.get_all_months_summary(group_id):
+            exps = database.get_expenses(group_id, m["month_label"])
+            found_exp = next((e for e in exps if e["expense_id"] == eid), None)
+            if found_exp:
+                break
+        if found_exp is None:
+            await query.edit_message_text(f"Expense {html.escape(eid)} not found.")
+            return
+        desc = html.escape(found_exp.get("description", "?"))
+        total_val = float(found_exp.get("total", 0.0))
+        paid_by = found_exp.get("paid_by", "?")
+        date_raw = found_exp.get("date", "?")
+        try:
+            short_date = datetime.strptime(date_raw, "%Y-%m-%d").strftime("%b %d %Y")
+        except Exception:
+            short_date = date_raw
+        shares: dict = found_exp.get("member_shares") or {}
+        share_parts = [f"{m} {sym}{float(a):.2f}" for m, a in shares.items()]
+        share_str = "  " + " · ".join(share_parts) if share_parts else ""
+        text = f"<b>#{html.escape(eid)}</b> {desc}\n💰 {sym}{total_val:.2f} · {paid_by} · {short_date}"
+        if share_str:
+            text += f"\n{share_str}"
+        await query.edit_message_text(text, parse_mode="HTML")
+        return
 
-    if state not in RECEIPT_STATES or ctx is None:
+    _sr = database.get_state(user_id, group_id); state = _sr.get("state") if _sr else None; ctx = _sr.get("context") if _sr else None
+
+    if state not in RECEIPT_STATES:
+        await query.edit_message_text(
+            "No active receipt flow found. Send a receipt photo to start."
+        )
+        return
+    if ctx is None:
         await query.edit_message_text(
             "No active receipt flow found. Send a receipt photo to start."
         )
@@ -882,11 +1146,10 @@ async def handle_receipt_callback(
         ctx["original_month"] = None
 
         # Check for duplicates now with the new date
-        sheet_id = (group or {}).get("sheet_id")
         merchant = ctx["extracted"].get("merchant")
         total = ctx["extracted"].get("total")
-        if sheet_id and merchant and total is not None and _is_duplicate(
-            sheet_id, ctx["month_label"], merchant, total, today_str
+        if merchant and total is not None and _is_duplicate(
+            group_id, ctx["month_label"], merchant, total, today_str
         ):
             database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx)
             await query.edit_message_text(
@@ -898,7 +1161,7 @@ async def handle_receipt_callback(
 
         database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx)
         display = format_extraction_for_display(ctx["extracted"])
-        await query.edit_message_text(display, reply_markup=_confirm_keyboard())
+        await query.edit_message_text(display, reply_markup=_confirm_keyboard(ctx.get("extracted", {}).get("category") if ctx else None))
         return
 
     # ------------------------------------------------------------------
@@ -910,12 +1173,11 @@ async def handle_receipt_callback(
             ctx["month_label"] = original_month
 
         # Check for duplicates in the receipt's own month
-        sheet_id = (group or {}).get("sheet_id")
         merchant = ctx["extracted"].get("merchant")
         total = ctx["extracted"].get("total")
         receipt_date = ctx["extracted"].get("date")
-        if sheet_id and merchant and total is not None and receipt_date and _is_duplicate(
-            sheet_id, ctx["month_label"], merchant, total, receipt_date
+        if merchant and total is not None and receipt_date and _is_duplicate(
+            group_id, ctx["month_label"], merchant, total, receipt_date
         ):
             database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx)
             await query.edit_message_text(
@@ -927,7 +1189,7 @@ async def handle_receipt_callback(
 
         database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx)
         display = format_extraction_for_display(ctx["extracted"])
-        await query.edit_message_text(display, reply_markup=_confirm_keyboard())
+        await query.edit_message_text(display, reply_markup=_confirm_keyboard(ctx.get("extracted", {}).get("category") if ctx else None))
         return
 
     # ------------------------------------------------------------------
@@ -936,6 +1198,42 @@ async def handle_receipt_callback(
     if data == CB_SAVE_DUPLICATE:
         # Proceed to payer selection despite duplicate
         await _ask_payer(update, group_id, user_id, ctx)
+        return
+
+    # ------------------------------------------------------------------
+    # Category menu (show category picker)
+    # ------------------------------------------------------------------
+    if data == CB_CATEGORY_MENU:
+        database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx)
+        current = ctx.get("extracted", {}).get("category") or "—"
+        await query.edit_message_text(
+            f"Select a category:\nCurrent: <b>{html.escape(current)}</b>",
+            reply_markup=_category_keyboard(),
+            parse_mode="HTML",
+        )
+        return
+
+    # ------------------------------------------------------------------
+    # Category selected
+    # ------------------------------------------------------------------
+    if data.startswith(CB_CAT_PREFIX):
+        category = data[len(CB_CAT_PREFIX):]
+        ctx.setdefault("extracted", {})["category"] = category
+        database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx)
+        display = format_extraction_for_display(ctx["extracted"])
+        await query.edit_message_text(display, reply_markup=_confirm_keyboard(category))
+        return
+
+    # ------------------------------------------------------------------
+    # Back from category menu
+    # ------------------------------------------------------------------
+    if data == CB_CAT_BACK:
+        database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_CONFIRM, ctx)
+        extracted = ctx.get("extracted", {})
+        display = format_extraction_for_display(extracted)
+        await query.edit_message_text(
+            display, reply_markup=_confirm_keyboard(extracted.get("category"))
+        )
         return
 
     # ------------------------------------------------------------------
@@ -1000,35 +1298,27 @@ async def handle_receipt_callback(
         return
 
     # ------------------------------------------------------------------
-    # Split by item assignment
+    # Split by item assignment — use button UI if items exist
     # ------------------------------------------------------------------
     if data == CB_SPLIT_ASSIGN:
         extracted = ctx.get("extracted", {})
         items = extracted.get("items") or []
-        items_text = _format_items_text(items)
-        members_data = database.get_members(group_id)
-        member_names = [m["name"] for m in members_data]
-        members_str = ", ".join(f'"{m.lower()}"' for m in member_names)
 
-        if items_text:
-            prompt = (
-                f"{items_text}\n\n"
-                f"Type your assignments. Examples:\n"
-                f"  2 karlos\n"
-                f"  1 karlos partner\n"
-                f"  all except karlos\n\n"
-                f"Member names: {members_str}"
-            )
+        if items:
+            await _ask_item_assign(update, group_id, user_id, ctx)
         else:
+            # No items detected — fall back to text-based assignment
+            members_data = database.get_members(group_id)
+            member_names = [m["name"] for m in members_data]
+            members_str = ", ".join(f'"{m.lower()}"' for m in member_names)
             prompt = (
                 "No itemized list available. You can still type assignments:\n"
                 f"  all {member_names[0].lower() if member_names else 'name'}\n"
                 f"  all except karlos\n\n"
                 f"Member names: {members_str}"
             )
-
-        database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_ASSIGNMENT, ctx)
-        await query.edit_message_text(prompt, reply_markup=_cancel_keyboard())
+            database.set_state(user_id, group_id, STATE_RECEIPT_AWAITING_ASSIGNMENT, ctx)
+            await query.edit_message_text(prompt, reply_markup=_cancel_keyboard())
         return
 
     # ------------------------------------------------------------------
@@ -1043,4 +1333,49 @@ async def handle_receipt_callback(
     # ------------------------------------------------------------------
     if data == CB_REASSIGN:
         await _ask_split(update, group_id, user_id, ctx)
+        return
+
+    # ------------------------------------------------------------------
+    # Per-item assignment button: receipt:item:{idx}:{member_idx or "s"}
+    # ------------------------------------------------------------------
+    if data.startswith(CB_ASSIGN_ITEM_PREFIX):
+        parts = data.split(":")
+        # Expected: ["receipt", "item", idx_str, value_str]
+        if len(parts) != 4:
+            return
+        try:
+            item_idx = int(parts[2])
+        except ValueError:
+            return
+        value_str = parts[3]
+        value: int | str = "s" if value_str == "s" else int(value_str)
+
+        assignments: dict = ctx.get("item_assignments", {})
+        assignments[str(item_idx)] = value
+        ctx["item_assignments"] = assignments
+        database.set_state(user_id, group_id, STATE_RECEIPT_ITEM_ASSIGN, ctx)
+
+        extracted = ctx.get("extracted", {})
+        items = extracted.get("items") or []
+        member_names = ctx.get("_member_names") or [m["name"] for m in database.get_members(group_id)]
+
+        text = _build_item_assign_text(items, member_names, assignments)
+        keyboard = _item_assign_keyboard(items, member_names, assignments)
+        await query.edit_message_text(text, reply_markup=keyboard)
+        return
+
+    # ------------------------------------------------------------------
+    # Submit item assignments
+    # ------------------------------------------------------------------
+    if data == CB_ASSIGN_SUBMIT:
+        assignments = ctx.get("item_assignments", {})
+        extracted = ctx.get("extracted", {})
+        items = extracted.get("items") or []
+        total = float(extracted.get("total") or 0.0)
+        hst_pct = extracted.get("hst_pct")
+        member_names = ctx.get("_member_names") or [m["name"] for m in database.get_members(group_id)]
+
+        shares = _assignments_to_shares(items, assignments, member_names, total, hst_pct)
+        ctx["member_shares"] = shares
+        await _show_save_confirm(update, group_id, user_id, ctx)
         return

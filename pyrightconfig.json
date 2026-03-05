@@ -1,0 +1,8 @@
+{
+  "pythonPath": "/Users/karlos/AGY/Projects/cc_agentic/auto_split/.venv/bin/python3",
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["."],
+  "typeCheckingMode": "basic",
+  "exclude": ["**/__pycache__"]
+}
