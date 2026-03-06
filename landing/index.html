@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SplitBot — Household Expense Tracker for Telegram</title>
+  <meta name="description" content="The smartest way to split shared expenses. Scan receipts with AI, track balances, and settle up — all inside Telegram." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="logo">💸 SplitBot</div>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="https://github.com/shawn137080/open_split" target="_blank">GitHub</a>
+        <a href="#pricing" class="btn-nav">Get Started →</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-glow"></div>
+    <div class="container">
+      <div class="badge">✨ Open Source &amp; Free to self-host</div>
+      <h1>The smartest way to <span class="gradient-text">split expenses</span> in your household</h1>
+      <p class="hero-sub">Scan receipts with AI · Track balances · Settle up · All inside Telegram. No app to download.</p>
+      <div class="hero-cta">
+        <a href="#pricing" class="btn-primary">Get SplitBot Pro →</a>
+        <a href="https://github.com/shawn137080/open_split" class="btn-ghost" target="_blank">Self-host for free</a>
+      </div>
+      <div class="hero-demo">
+        <div class="phone-mock">
+          <div class="phone-screen">
+            <div class="chat-msg bot">
+              <span class="avatar">🤖</span>
+              <div class="bubble">📸 Receipt scanned! Total: <b>$87.43</b><br/>How to split?</div>
+            </div>
+            <div class="chat-msg user">
+              <div class="bubble">Equal split</div>
+            </div>
+            <div class="chat-msg bot">
+              <span class="avatar">🤖</span>
+              <div class="bubble">✅ Saved! Each person owes <b>$43.72</b></div>
+            </div>
+            <div class="chat-msg bot">
+              <span class="avatar">🤖</span>
+              <div class="bubble">💸 <b>Balance update</b><br/>Alex → Mike: $43.72</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-header">
+        <h2>Everything you need to stop arguing about money</h2>
+        <p>Built for roommates, couples, and households</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📸</div>
+          <h3>Receipt OCR</h3>
+          <p>Photo your receipt. Gemini AI extracts every item, tax, and tip instantly.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚖️</div>
+          <h3>Flexible Splits</h3>
+          <p>Equal, mine-only, custom %, or "A pays for B" — every scenario covered.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>Monthly Summary</h3>
+          <p>See exactly who owes whom at a glance. One command, instant clarity.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔄</div>
+          <h3>Fixed Expenses</h3>
+          <p>Set rent, utilities, subscriptions once. Auto-seeded every month.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📁</div>
+          <h3>CSV Export</h3>
+          <p>Download monthly expense reports for budgeting or tax records.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>Private by Design</h3>
+          <p>Data stays in your group. Self-hosted means only you control it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how">
+    <div class="container">
+      <div class="section-header">
+        <h2>Up and running in 2 minutes</h2>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-text">
+            <h4>Add bot to your group</h4>
+            <p>Search <b>@YourSplitBot</b> on Telegram and add to your household chat.</p>
+          </div>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-text">
+            <h4>Run /start</h4>
+            <p>The bot guides you through onboarding — member names, currency, timezone.</p>
+          </div>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-text">
+            <h4>Send a receipt</h4>
+            <p>Photo, confirm, split. Your balance updates in seconds.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="pricing" id="pricing">
+    <div class="container">
+      <div class="section-header">
+        <h2>Simple, transparent pricing</h2>
+        <p>Start free. Upgrade when you want more.</p>
+      </div>
+      <div class="pricing-grid">
+
+        <!-- FREE TIER -->
+        <div class="plan-card">
+          <div class="plan-name">Self-Hosted</div>
+          <div class="plan-price">Free <span>forever</span></div>
+          <div class="plan-desc">Full source code on GitHub. Deploy on Railway or your own VPS.</div>
+          <ul class="plan-features">
+            <li>✅ Expense tracking &amp; splitting</li>
+            <li>✅ Receipt OCR (Gemini Flash)</li>
+            <li>✅ Fixed recurring expenses</li>
+            <li>✅ CSV export</li>
+            <li>✅ Monthly summaries</li>
+            <li>✅ Unlimited members</li>
+            <li class="dim">— /stats trends</li>
+            <li class="dim">— Budget alerts</li>
+            <li class="dim">— Cloud backup</li>
+            <li class="dim">— Zero-ops hosting</li>
+          </ul>
+          <a href="https://railway.app/new/template?template=https://github.com/shawn137080/open_split" class="btn-outline" target="_blank">Deploy on Railway →</a>
+        </div>
+
+        <!-- PRO TIER -->
+        <div class="plan-card plan-pro">
+          <div class="plan-badge">Most Popular</div>
+          <div class="plan-name">Hosted Pro</div>
+          <div class="plan-price">$5 <span>/ month</span></div>
+          <div class="plan-desc">We run it for you. No servers, no maintenance, just use it.</div>
+          <ul class="plan-features">
+            <li>✅ Everything in free</li>
+            <li>✅ <b>/stats</b> — spending trends</li>
+            <li>✅ <b>/budget</b> — category limits &amp; alerts</li>
+            <li>✅ Cloud DB backup</li>
+            <li>✅ Zero-ops (we handle updates)</li>
+            <li>✅ Priority support</li>
+            <li>✅ Pro badge in bot</li>
+          </ul>
+          <a href="https://buy.stripe.com/REPLACE_WITH_YOUR_STRIPE_LINK" class="btn-primary" id="pro-cta">Get Hosted Pro →</a>
+          <p class="plan-note">You'll be asked for your Telegram group ID after payment.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq">
+    <div class="container">
+      <div class="section-header"><h2>Common questions</h2></div>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary>Do I need to install anything?</summary>
+          <p>No. SplitBot lives entirely inside Telegram. Your household just needs to add the bot to your group chat.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is my data private?</summary>
+          <p>On the self-hosted version the SQLite database lives on your own server. On Hosted Pro your data is stored on our secure VPS and never shared with third parties.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What happens when I pay?</summary>
+          <p>After checkout you'll receive an email with instructions to send us your Telegram group ID. We'll activate Pro within 24 hours (usually within minutes).</p>
+        </details>
+        <details class="faq-item">
+          <summary>Can I cancel anytime?</summary>
+          <p>Yes. Cancel your Stripe subscription at any time — no lock-in, no questions asked.</p>
+        </details>
+        <details class="faq-item">
+          <summary>How many people can use one subscription?</summary>
+          <p>One subscription covers one Telegram group (one household). Multiple groups require separate subscriptions.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div class="logo">💸 SplitBot</div>
+        <div class="footer-links">
+          <a href="https://github.com/shawn137080/open_split" target="_blank">GitHub</a>
+          <a href="https://github.com/shawn137080/open_split/blob/main/LICENSE" target="_blank">MIT License</a>
+          <a href="mailto:hello@splitbot.app">Contact</a>
+        </div>
+      </div>
+      <p class="footer-copy">© 2026 SplitBot. Open source under MIT License.</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
