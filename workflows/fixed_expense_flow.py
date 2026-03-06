@@ -38,14 +38,15 @@ STATE_FIXEDEXP_EDIT_AMOUNT = "fixedexp_edit_amount"
 # Callback data prefixes
 # ---------------------------------------------------------------------------
 
-CB_ADDFIXED_PAIDBY_PFX   = "afpb:"
-CB_ADDFIXED_SPLIT_EQUAL  = "afs:equal"
-CB_ADDFIXED_SPLIT_MINE   = "afs:mine"   # entire amount borne by payer
-CB_ADDFIXED_START_THIS   = "afst:this"
-CB_ADDFIXED_START_NEXT   = "afst:next"
-CB_ADDFIXED_START_TYPE   = "afst:type"  # user will type a month
-CB_ADDFIXED_CONFIRM_YES  = "afc:yes"
-CB_ADDFIXED_CONFIRM_NO   = "afc:no"
+CB_ADDFIXED_PAIDBY_PFX      = "afpb:"
+CB_ADDFIXED_SPLIT_EQUAL     = "afs:equal"
+CB_ADDFIXED_SPLIT_MINE      = "afs:mine"       # entire amount borne by payer
+CB_ADDFIXED_SPLIT_FOR_PFX   = "afs:for:"       # afs:for:<target> — payer pays FOR target
+CB_ADDFIXED_START_THIS      = "afst:this"
+CB_ADDFIXED_START_NEXT      = "afst:next"
+CB_ADDFIXED_START_TYPE      = "afst:type"      # user will type a month
+CB_ADDFIXED_CONFIRM_YES     = "afc:yes"
+CB_ADDFIXED_CONFIRM_NO      = "afc:no"
 
 CB_FE_SELECT_PFX         = "fes:"       # fes:<id>
 CB_FE_SKIP_THIS          = "feskip:"    # feskip:<id>
@@ -61,6 +62,7 @@ CB_FE_EDIT_AMOUNT        = "fee_amt:"   # fee_amt:<id>   — prompt for new amou
 CB_FE_EDIT_PAIDBY_PFX    = "fee_pb:"    # fee_pb:<id>:<name>
 CB_FE_EDIT_SPLIT_EQUAL   = "fee_se:"    # fee_se:<id>
 CB_FE_EDIT_SPLIT_MINE    = "fee_sm:"    # fee_sm:<id>
+CB_FE_EDIT_SPLIT_FOR_PFX = "fee_sf:"    # fee_sf:<id>:<target>  — pays FOR target
 CB_FE_EDIT_BACK          = "fee_back:"  # fee_back:<id>  — back to detail
 
 # ---------------------------------------------------------------------------
@@ -86,10 +88,17 @@ def _next_month_label(timezone: str = "America/Toronto") -> str:
     return f"{_MONTH_LABELS[now.month]} {now.year}"
 
 
-def _split_label(split_type: str, paid_by: str) -> str:
+def _split_label(split_type: str, paid_by: str, members: list[str] | None = None) -> str:
     if split_type == "equal":
         return "Equal split"
-    return f"All on {paid_by}"
+    if split_type == paid_by.lower():
+        return f"All on {paid_by}"
+    # paid_for: payer pays on behalf of another member
+    if members:
+        target = next((m for m in members if m.lower() == split_type), None)
+        if target:
+            return f"{paid_by} pays for {target}"
+    return f"{paid_by} pays for {split_type.title()}"
 
 
 def _fe_list_text(fixed_expenses: list[dict], month_label: str) -> str:
@@ -103,6 +112,11 @@ def _fe_list_text(fixed_expenses: list[dict], month_label: str) -> str:
         )
     lines.append("\nTap an item to manage it.")
     return "\n".join(lines)
+
+
+def _other_members(members: list[str], paid_by: str) -> list[str]:
+    """Return members excluding the payer (for paid_for selection)."""
+    return [m for m in members if m.lower() != paid_by.lower()]
 
 
 def _fe_detail_text(fe: dict, month_label: str, is_skipped_this_month: bool) -> str:
@@ -147,22 +161,30 @@ def _fe_list_keyboard(fixed_expenses: list[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
-def _fe_edit_keyboard(fe_id: int, members: list[str]) -> InlineKeyboardMarkup:
+def _fe_edit_keyboard(fe_id: int, members: list[str], paid_by: str = "") -> InlineKeyboardMarkup:
     """Show edit options: amount, payer, split."""
     payer_buttons = [
         InlineKeyboardButton(m, callback_data=f"{CB_FE_EDIT_PAIDBY_PFX}{fe_id}:{m}")
         for m in members
     ]
+    # Paid-for buttons: one per non-payer member
+    others = _other_members(members, paid_by) if paid_by else [m for m in members]
+    paid_for_buttons = [
+        InlineKeyboardButton(f"Pays for {m}", callback_data=f"{CB_FE_EDIT_SPLIT_FOR_PFX}{fe_id}:{m}")
+        for m in others
+    ]
     rows = [
         [InlineKeyboardButton("💰 Change amount", callback_data=f"{CB_FE_EDIT_AMOUNT}{fe_id}")],
-        [InlineKeyboardButton("👤 Change payer:", callback_data=f"noop")],
+        [InlineKeyboardButton("👤 Change payer:", callback_data="noop")],
         payer_buttons,
         [
             InlineKeyboardButton("Equal split", callback_data=f"{CB_FE_EDIT_SPLIT_EQUAL}{fe_id}"),
             InlineKeyboardButton("Payer bears all", callback_data=f"{CB_FE_EDIT_SPLIT_MINE}{fe_id}"),
         ],
-        [InlineKeyboardButton("← Back", callback_data=f"{CB_FE_EDIT_BACK}{fe_id}")],
     ]
+    if paid_for_buttons:
+        rows.append(paid_for_buttons)
+    rows.append([InlineKeyboardButton("← Back", callback_data=f"{CB_FE_EDIT_BACK}{fe_id}")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -319,7 +341,8 @@ async def _show_addfixed_confirm(update: Update, ctx: dict) -> None:
     paid_by = ctx.get("paid_by", "?")
     split = ctx.get("split_type", "equal")
     start = ctx.get("start_month", "this month")
-    split_label = "Equal split" if split == "equal" else f"All on {paid_by}"
+    members = ctx.get("members", [])
+    split_label = _split_label(split, paid_by, members)
     text = (
         f"📋 <b>Confirm Fixed Expense</b>\n\n"
         f"Description: {desc}\n"
@@ -363,10 +386,19 @@ async def handle_add_fixed_callback(
         paid_by = data[len(CB_ADDFIXED_PAIDBY_PFX):]
         ctx["paid_by"] = paid_by
         database.set_state(user_id, group_id, STATE_ADDFIXED_SPLIT, ctx)
-        keyboard = InlineKeyboardMarkup([[
+        members = ctx.get("members", [])
+        others = _other_members(members, paid_by)
+        paid_for_buttons = [
+            InlineKeyboardButton(f"Pays for {m}", callback_data=f"{CB_ADDFIXED_SPLIT_FOR_PFX}{m}")
+            for m in others
+        ]
+        rows = [[
             InlineKeyboardButton("Equal split", callback_data=CB_ADDFIXED_SPLIT_EQUAL),
             InlineKeyboardButton(f"All on {paid_by}", callback_data=CB_ADDFIXED_SPLIT_MINE),
-        ]])
+        ]]
+        if paid_for_buttons:
+            rows.append(paid_for_buttons)
+        keyboard = InlineKeyboardMarkup(rows)
         await query.edit_message_text(
             f"Paid by {paid_by}. How to split?",
             reply_markup=keyboard,
@@ -374,8 +406,16 @@ async def handle_add_fixed_callback(
         return
 
     # ---- split type → ask for start month ----
-    if data in (CB_ADDFIXED_SPLIT_EQUAL, CB_ADDFIXED_SPLIT_MINE):
-        split = "equal" if data == CB_ADDFIXED_SPLIT_EQUAL else ctx.get("paid_by", "equal").lower()
+    is_paid_for = data.startswith(CB_ADDFIXED_SPLIT_FOR_PFX)
+    if data in (CB_ADDFIXED_SPLIT_EQUAL, CB_ADDFIXED_SPLIT_MINE) or is_paid_for:
+        if data == CB_ADDFIXED_SPLIT_EQUAL:
+            split = "equal"
+        elif is_paid_for:
+            # split_type = target member name (lowercase) — payer pays on behalf of target
+            target = data[len(CB_ADDFIXED_SPLIT_FOR_PFX):]
+            split = target.lower()
+        else:
+            split = ctx.get("paid_by", "equal").lower()
         ctx["split_type"] = split
         database.set_state(user_id, group_id, STATE_ADDFIXED_STARTMONTH, ctx)
         cur = _current_month_label(timezone)
@@ -607,10 +647,10 @@ async def handle_fixedexp_callback(
         await query.edit_message_text(
             f"✏️ <b>Edit: {fe['description']}</b>\n"
             f"Current: ${fe['amount']:.2f} · {fe['paid_by_name']} · "
-            f"{_split_label(fe['split_type'], fe['paid_by_name'])}\n\n"
+            f"{_split_label(fe['split_type'], fe['paid_by_name'], member_names)}\n\n"
             f"What do you want to change?",
             parse_mode="HTML",
-            reply_markup=_fe_edit_keyboard(fe_id, member_names),
+            reply_markup=_fe_edit_keyboard(fe_id, member_names, fe['paid_by_name']),
         )
         return
 
@@ -669,6 +709,25 @@ async def handle_fixedexp_callback(
         name = fe["description"]
         await query.edit_message_text(
             f"✅ <b>{name}</b> split changed — {fe['paid_by_name']} bears all.",
+            parse_mode="HTML",
+        )
+        return
+
+    # ---- edit: pays for another member ----
+    if data.startswith(CB_FE_EDIT_SPLIT_FOR_PFX):
+        rest = data[len(CB_FE_EDIT_SPLIT_FOR_PFX):]
+        parts = rest.split(":", 1)
+        if len(parts) != 2:
+            return
+        fe_id = int(parts[0])
+        target_name = parts[1]
+        database.update_fixed_expense(fe_id, split_type=target_name.lower())
+        fixed = database.get_fixed_expenses(group_id)
+        fe = next((f for f in fixed if f["id"] == fe_id), None)
+        name = fe["description"] if fe else "Expense"
+        payer = fe["paid_by_name"] if fe else "Payer"
+        await query.edit_message_text(
+            f"✅ <b>{name}</b> split changed — {payer} pays for {target_name}.",
             parse_mode="HTML",
         )
         return
