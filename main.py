@@ -119,8 +119,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _HELP_TEXT = (
-    "<b>SplitBot — Expense Tracker</b>\n"
+    "🥜 <b>Welcome to NutSplit!</b> 🐿️\n"
+    "I am Pip the Squirrel, your friendly household expense tracker. I help you track shared expenses, split bills, and keep balances clear!\n"
     "\n"
+    "Here is what I can do for you:\n"
     "<b>Add Expenses</b>\n"
     "📸 Send photo — scan a receipt\n"
     "/add — guided entry (buttons)\n"

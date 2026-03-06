@@ -1,4 +1,4 @@
-# SplitBot — Household Expense Tracker
+# NutSplit — Household Expense Tracker
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Telegram Bot](https://img.shields.io/badge/platform-Telegram-26a5e4)
@@ -32,7 +32,7 @@ Telegram bot for splitting shared household expenses. Send a receipt photo → A
 
 ### Option 1 — Railway (one-click, recommended)
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/shawn137080/open_split)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/shawn137080/nutsplit)
 
 1. Click the button above
 2. Set **2 environment variables**:
@@ -47,7 +47,7 @@ Telegram bot for splitting shared household expenses. Send a receipt photo → A
 ### Option 2 — Docker (any VPS)
 
 ```bash
-git clone https://github.com/shawn137080/open_split.git && cd open_split
+git clone https://github.com/shawn137080/nutsplit.git && cd nutsplit
 cp .env.example .env   # fill in your tokens
 docker compose up -d
 ```
@@ -59,8 +59,8 @@ docker compose up -d
 ### Step 1 — Clone and install
 
 ```bash
-git clone https://github.com/<your-username>/open_split.git
-cd open_split
+git clone https://github.com/<your-username>/nutsplit.git
+cd nutsplit
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -103,8 +103,8 @@ Open Telegram, send `/start` to your bot, and follow the onboarding steps.
 
 ```bash
 ssh root@<your-vps-ip>
-git clone https://github.com/<your-username>/open_split.git /opt/open_split
-cd /opt/open_split
+git clone https://github.com/<your-username>/nutsplit.git /opt/nutsplit
+cd /opt/nutsplit
 ```
 
 ### Step 2 — Configure environment on server
@@ -133,7 +133,7 @@ docker compose logs bot --tail=20
 You should see:
 ```
 Database initialized.
-SplitBot starting — polling for updates...
+NutSplit starting — polling for updates...
 ```
 
 ---
@@ -151,14 +151,14 @@ scp auto_split.db root@<your-vps-ip>:/tmp/auto_split.db
 **2. Copy into the Docker volume (on the server):**
 
 ```bash
-VOLUME_PATH=$(docker volume inspect open_split_bot_data --format '{{.Mountpoint}}')
+VOLUME_PATH=$(docker volume inspect nutsplit_bot_data --format '{{.Mountpoint}}')
 cp /tmp/auto_split.db "$VOLUME_PATH/auto_split.db"
 ```
 
 **3. Restart the bot:**
 
 ```bash
-cd /opt/open_split && docker compose restart bot
+cd /opt/nutsplit && docker compose restart bot
 ```
 
 ---
