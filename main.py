@@ -43,6 +43,9 @@ from workflows.receipt_flow import (
     is_receipt_state,
 )
 from workflows.summary_flow import (
+    CB_MONTHPICK_SUMMARY,
+    CB_MONTHPICK_HISTORY,
+    CB_MONTHPICK_EXPORT,
     handle_delete_command,
     handle_edit_command,
     handle_history_command,
@@ -212,6 +215,33 @@ async def _route_text_message(
             await handle_add_fixed_message(update, context)
 
 
+async def _handle_month_pick_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle month picker button presses from /summary, /history, /export."""
+    query = update.callback_query
+    if query is None:
+        return
+    await query.answer()
+    data: str = query.data or ""
+
+    if data.startswith(CB_MONTHPICK_SUMMARY):
+        month_label = data[len(CB_MONTHPICK_SUMMARY):]
+        context.args = month_label.split()  # type: ignore[assignment]
+        await query.edit_message_text(f"📊 Loading {month_label}…")
+        await handle_summary_command(update, context)
+    elif data.startswith(CB_MONTHPICK_HISTORY):
+        month_label = data[len(CB_MONTHPICK_HISTORY):]
+        context.args = month_label.split()  # type: ignore[assignment]
+        await query.edit_message_text(f"📋 Loading {month_label}…")
+        await handle_history_command(update, context)
+    elif data.startswith(CB_MONTHPICK_EXPORT):
+        month_label = data[len(CB_MONTHPICK_EXPORT):]
+        context.args = month_label.split()  # type: ignore[assignment]
+        await query.edit_message_text(f"📁 Exporting {month_label}…")
+        await handle_export_command(update, context)
+
+
 async def _route_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -249,6 +279,7 @@ async def _route_callback(
         or data.startswith(CB_FE_EDIT_PAIDBY_PFX)
         or data.startswith(CB_FE_EDIT_SPLIT_EQUAL)
         or data.startswith(CB_FE_EDIT_SPLIT_MINE)
+        or data.startswith(CB_FE_EDIT_SPLIT_FOR_PFX)
         or data.startswith(CB_FE_EDIT_BACK)
         or data == CB_FE_BACK
     ):
@@ -257,6 +288,8 @@ async def _route_callback(
         await handle_settings_callback(update, context)
     elif data.startswith("rec:"):
         await handle_records_callback(update, context)
+    elif data.startswith("mp:"):
+        await _handle_month_pick_callback(update, context)
     else:
         await query.answer("Unknown action.")
 

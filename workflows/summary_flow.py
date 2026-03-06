@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 
 import pytz
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 import database
@@ -127,6 +127,38 @@ def _parse_month_label(
     return f"{abbrev} {year}"
 
 
+# ---------------------------------------------------------------------------
+# Month picker
+# ---------------------------------------------------------------------------
+
+CB_MONTHPICK_SUMMARY  = "mp:sum:"
+CB_MONTHPICK_HISTORY  = "mp:his:"
+CB_MONTHPICK_EXPORT   = "mp:exp:"
+
+
+def _month_picker_keyboard(
+    group_id: str,
+    cb_prefix: str,
+    current_label: str,
+) -> InlineKeyboardMarkup:
+    """Build a keyboard with the current month + months that have data."""
+    months_with_data: list[str] = [
+        m["month_label"]
+        for m in database.get_all_months_summary(group_id)
+        if m["month_label"] != current_label
+    ][:5]  # at most 5 past months
+
+    rows = [[InlineKeyboardButton(
+        f"📅 {current_label} (this month)",
+        callback_data=f"{cb_prefix}{current_label}",
+    )]]
+    for ml in months_with_data:
+        rows.append([InlineKeyboardButton(
+            ml, callback_data=f"{cb_prefix}{ml}"
+        )])
+    return InlineKeyboardMarkup(rows)
+
+
 def _format_expense_row(expense: dict, currency: str = "CAD") -> str:
     """
     Format a single expense as a mobile-friendly HTML card.
@@ -202,6 +234,15 @@ async def handle_summary_command(
         await handle_multisummary_command(update, context)
         return
 
+    # No args → show month picker
+    if not args:
+        current = _current_month_label(timezone)
+        kb = _month_picker_keyboard(group_id, CB_MONTHPICK_SUMMARY, current)
+        await update.effective_message.reply_text(
+            "📅 Which month?", reply_markup=kb
+        )
+        return
+
     month_label: Optional[str] = _parse_month_label(args, timezone)
 
     if month_label is None:
@@ -272,6 +313,15 @@ async def handle_history_command(
     if args and args[-1].lower() not in _MONTH_MAP and not args[-1].isdigit():
         category_filter = args[-1]
         args = args[:-1]
+
+    # No args → show month picker
+    if not args:
+        current = _current_month_label(timezone)
+        kb = _month_picker_keyboard(group_id, CB_MONTHPICK_HISTORY, current)
+        await update.effective_message.reply_text(
+            "📅 Which month?", reply_markup=kb
+        )
+        return
 
     month_label: Optional[str] = _parse_month_label(args, timezone)
 
