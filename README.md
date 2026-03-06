@@ -1,6 +1,30 @@
-# auto_split — Household Expense Tracker Bot
+# SplitBot — Household Expense Tracker
 
-Telegram bot for splitting shared household expenses. Send a receipt photo, the bot extracts the data with AI, you choose how to split it — all stored locally in SQLite.
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+![Telegram Bot](https://img.shields.io/badge/platform-Telegram-26a5e4)
+
+Telegram bot for splitting shared household expenses. Send a receipt photo → AI extracts the data → you choose how to split → balance tracked automatically.
+
+**Open-source & self-hostable.** A managed hosted version with extras is also available.
+
+---
+
+## ✨ Open Source vs Hosted
+
+| Feature | Self-hosted (free) | Hosted Pro |
+|---|---|---|
+| Expense tracking & splitting | ✅ | ✅ |
+| Receipt OCR (Gemini Flash) | ✅ | ✅ |
+| Fixed recurring expenses | ✅ | ✅ |
+| CSV export | ✅ | ✅ |
+| Monthly records & summaries | ✅ | ✅ |
+| Monthly spending trends `/stats` | — | ✅ |
+| Budget alerts | — | ✅ |
+| Cloud DB backup | — | ✅ |
+| Zero-ops setup | — | ✅ |
+| Priority support | — | ✅ |
+
+> Self-hosting takes ~10 minutes. See setup instructions below.
 
 ---
 
