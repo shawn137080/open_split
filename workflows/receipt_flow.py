@@ -517,7 +517,7 @@ async def handle_photo(
 
     # Send "processing" message
     processing_msg = await update.effective_message.reply_text(
-        "Reading your receipt..."
+        "🐿️ Pip is carefully reading your receipt..."
     )
 
     # Set state immediately to RECEIPT_PROCESSING to block concurrent photos
@@ -548,7 +548,7 @@ async def handle_photo(
     except Exception as exc:
         logger.exception("Receipt extraction failed: %s", exc)
         await processing_msg.edit_text(
-            "Something went wrong reading your receipt. Please try again."
+            "🌰 Oops! Pip dropped the receipt and couldn't read it. Please try again."
         )
         database.clear_state(user_id, group_id)
         return
@@ -569,7 +569,7 @@ async def handle_photo(
             }
         )
         await processing_msg.edit_text(
-            "Couldn't read receipt. Please enter manually:\n\n"
+            "🌰 Pip couldn't decipher this one! Let's enter it manually:\n\n"
             "What's the merchant name?",
             reply_markup=_cancel_keyboard(),
         )
@@ -789,7 +789,7 @@ async def _do_save(
 
         # Step 5: show success + balance summary
         balance_text = format_balance_summary(balances, month_label, currency=currency)
-        success_msg = f"✅ <b>Saved!</b> #{html.escape(expense_id)}\n\n{balance_text}"
+        success_msg = f"🌰 <b>Tucked away!</b> (Receipt #{html.escape(expense_id)})\n\n{balance_text}"
         view_kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("📋 View expense", callback_data=f"{CB_VIEW_EXPENSE}{expense_id}"),
         ]])

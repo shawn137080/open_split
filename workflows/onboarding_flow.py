@@ -103,13 +103,13 @@ async def _finalize_setup(
 
     members_text = ", ".join(members)
     completion_msg = (
-        f"✅ <b>Setup complete!</b>\n\n"
+        f"🎉 <b>Setup complete! Pip the Squirrel is ready to track.</b> 🐿️\n\n"
         f"Household: <b>{household_name}</b>\n"
         f"Members: {members_text}\n\n"
         f"<b>What's next:</b>\n"
         f"  • /add_fixed — set up recurring monthly expenses (rent, internet…)\n"
         f"  • /settings — set timezone, currency, and default tax rate\n"
-        f"  • Send a photo to start scanning a receipt\n"
+        f"  • Send a photo of a receipt to let Pip scan it 📸\n"
         f"  • /help — see all commands"
     )
 
@@ -143,7 +143,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # If the group is already configured, show status only
     if database.group_exists(group_id):
         await update.effective_message.reply_text(
-            "This household is already configured. Use /help to see available commands."
+            "🐿️ Pip says this household is already configured! Use /help to see what I can do."
         )
         return
 
@@ -161,8 +161,8 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
     await update.effective_message.reply_text(
-        "👋 Welcome to auto_split! Let's set up your household.\n\n"
-        "What's your household name? (e.g., 'The Smith Household')"
+        "👋 <b>Welcome to NutSplit!</b> Pip the Squirrel is here to help you track expenses without the fuss 🐿️.\n\n"
+        "First, what should we call your household? (e.g., 'The Nut House', 'Apt 4B')"
     )
 
 
@@ -201,7 +201,7 @@ async def handle_onboarding_message(
         database.set_state(user_id, group_id, STATE_AWAITING_MEMBER_NAME, ctx)
 
         await update.effective_message.reply_text(
-            f"Got it! Now add your first household member.\n"
+            f"🌰 Got it! Now let's add your first household member.\n"
             f"What's the first member's name?"
         )
         return
@@ -221,7 +221,7 @@ async def handle_onboarding_message(
         database.set_state(user_id, group_id, STATE_AWAITING_MORE_MEMBERS, ctx)
 
         await update.effective_message.reply_text(
-            f"Added {text}! Add another member?",
+            f"🌰 Added {text}! Add another member?",
             reply_markup=_more_members_keyboard(),
         )
         return

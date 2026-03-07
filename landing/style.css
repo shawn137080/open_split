@@ -1,5 +1,5 @@
 /* ── Reset & Base ─────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@300;400;500;600;700;800;900&display=swap');
 
 *,
 *::before,
@@ -10,22 +10,19 @@
 }
 
 :root {
-  --bg: #fffaf5;
-  /* Warm cream/off-white */
-  --bg2: #ffe5d9;
-  /* Soft peach/pink */
-  --card-bg: #ffffff;
-  --border: #f0ddd1;
-  --text: #4a3f35;
-  --text-heading: #31251e;
-  --muted: #8c7d70;
-  --accent: #ff9f43;
-  /* Nut orange */
-  --accent2: #ff7675;
-  /* Soft red/pink */
-  --accent-light: #ffebd6;
-  --green: #2ed573;
-  --blue: #70a1ff;
+  --bg: #F8FAFC;
+  --bg2: #F1F5F9;
+  --card-bg: #FFFFFF;
+  --border: #CBD5E1;
+  --text: #334155;
+  --text-heading: #0F172A;
+  --muted: #64748B;
+  --accent: #F59E0B;
+  --accent-dark: #D97706;
+  --accent2: #8B5CF6;
+  --accent-light: #FEF3C7;
+  --green: #10B981;
+  --blue: #3B82F6;
   --radius: 24px;
 }
 
@@ -40,6 +37,22 @@ body {
   line-height: 1.6;
   overflow-x: hidden;
 }
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.logo,
+.badge,
+.btn-primary,
+.btn-ghost,
+.btn-nav,
+.btn-outline {
+  font-family: 'Fredoka', 'Nunito', sans-serif;
+}
+
 
 .container {
   max-width: 1100px;
@@ -102,14 +115,15 @@ body {
   color: #fff !important;
   padding: 10px 20px;
   border-radius: 99px;
-  font-weight: 700;
-  box-shadow: 0 4px 0 #e68a00;
+  font-weight: 600;
+  border: 2px solid var(--accent-dark);
+  box-shadow: 0 4px 0 var(--accent-dark), inset 0 2px 0 rgba(255, 255, 255, 0.3);
   transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .btn-nav:hover {
   transform: translateY(2px);
-  box-shadow: 0 2px 0 #e68a00;
+  box-shadow: 0 2px 0 var(--accent-dark), inset 0 2px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* ── HERO ─────────────────────────────────────────────── */
@@ -180,35 +194,38 @@ body {
   color: #fff;
   padding: 16px 32px;
   border-radius: 99px;
-  font-weight: 800;
-  font-size: 1.1rem;
+  font-weight: 600;
+  font-size: 1.15rem;
+  letter-spacing: 0.5px;
   text-decoration: none;
-  box-shadow: 0 6px 0 #e68a00;
+  border: 3px solid var(--accent-dark);
+  box-shadow: 0 6px 0 var(--accent-dark), inset 0 4px 0 rgba(255, 255, 255, 0.3);
   transition: transform .1s, box-shadow .1s;
 }
 
 .btn-primary:hover {
   transform: translateY(4px);
-  box-shadow: 0 2px 0 #e68a00;
+  box-shadow: 0 2px 0 var(--accent-dark), inset 0 2px 0 rgba(255, 255, 255, 0.3);
 }
 
 .btn-ghost {
   color: var(--text-heading);
   padding: 16px 32px;
   border-radius: 99px;
-  font-weight: 700;
-  font-size: 1.1rem;
+  font-weight: 600;
+  font-size: 1.15rem;
+  letter-spacing: 0.5px;
   text-decoration: none;
   background: #fff;
-  border: 2px solid var(--border);
-  box-shadow: 0 6px 0 var(--border);
+  border: 3px solid var(--border);
+  box-shadow: 0 6px 0 var(--border), inset 0 -3px 0 rgba(0, 0, 0, 0.02);
   transition: transform .1s, box-shadow .1s;
 }
 
 .btn-ghost:hover {
   transform: translateY(4px);
-  box-shadow: 0 2px 0 var(--border);
-  border-color: var(--muted);
+  box-shadow: 0 2px 0 var(--border), inset 0 -1px 0 rgba(0, 0, 0, 0.02);
+  border-color: #94A3B8;
 }
 
 /* Mascot & Phone */
@@ -258,7 +275,7 @@ body {
   transform: translateX(-50%);
   width: 100px;
   height: 24px;
-  background: #4a3f35;
+  background: #334155;
   border-radius: 0 0 12px 12px;
 }
 
@@ -652,20 +669,21 @@ body {
 .btn-outline {
   display: block;
   text-decoration: none;
-  border: 2px solid var(--muted);
+  border: 3px solid var(--border);
   color: var(--text-heading);
   background: #fff;
   padding: 16px 24px;
   border-radius: 99px;
-  font-weight: 800;
-  font-size: 1.1rem;
-  box-shadow: 0 4px 0 var(--muted);
+  font-weight: 600;
+  font-size: 1.15rem;
+  box-shadow: 0 6px 0 var(--border), inset 0 -3px 0 rgba(0, 0, 0, 0.02);
   transition: transform .1s, box-shadow .1s;
 }
 
 .btn-outline:hover {
   transform: translateY(4px);
-  box-shadow: 0 0px 0 var(--muted);
+  box-shadow: 0 2px 0 var(--border), inset 0 -1px 0 rgba(0, 0, 0, 0.02);
+  border-color: #94A3B8;
 }
 
 .plan-pro .btn-primary {
