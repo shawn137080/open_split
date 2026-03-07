@@ -115,6 +115,14 @@ def init_db() -> None:
                 updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (user_id, group_id)
             );
+
+            CREATE TABLE IF NOT EXISTS feedback (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       TEXT NOT NULL,
+                group_id      TEXT NOT NULL,
+                message       TEXT NOT NULL,
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
         conn.commit()

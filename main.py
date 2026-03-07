@@ -106,6 +106,7 @@ from workflows.settings_flow import (
     handle_settings_message,
     is_settings_state,
 )
+from workflows.feedback_flow import handle_feedback
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -141,6 +142,7 @@ _HELP_TEXT = (
     "/edit EXP-003 amount 55.00 — edit expense\n"
     "/delete EXP-003 — remove expense\n"
     "/export [feb] — download CSV\n"
+    "/feedback — submit a bug or feature request\n"
     "\n"
     "<b>Fixed Expenses</b>\n"
     "/add_fixed — add a recurring monthly expense\n"
@@ -354,6 +356,7 @@ def main() -> None:
     app.add_handler(CommandHandler("edit",     handle_edit_command))
     app.add_handler(CommandHandler("export",   handle_export_command))
     app.add_handler(CommandHandler("records",  handle_records_command))
+    app.add_handler(CommandHandler("feedback", handle_feedback))
 
     # --- Pro features ---
     async def _stats(u, c): await handle_stats_command(u, c, is_pro=IS_PRO)
