@@ -21,7 +21,12 @@ from telegram.ext import (
 )
 
 import database
-from config import IS_PRO, TELEGRAM_TOKEN, ADMIN_TELEGRAM_ID
+from config import IS_PRO, TELEGRAM_TOKEN, ADMIN_TELEGRAM_ID, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+from workflows.upgrade_flow import handle_upgrade_command
+try:
+    from pro.saas_bridge import init_saas
+except ImportError:
+    init_saas = None  # type: ignore
 from pro.stats_flow import handle_stats_command
 from pro.budget_flow import handle_budget_command
 from workflows.manual_expense_flow import (
@@ -149,6 +154,7 @@ _HELP_TEXT = (
     "/fixedexp — view & manage fixed expenses\n"
     "\n"
     "<b>Pro features</b>\n"
+    "/upgrade — Get NutSplit Pro ($4.99/mo)\n"
     "/stats — spending trends (⭐ Pro)\n"
     "/budget — category budget limits (⭐ Pro)\n"
     "\n"
@@ -348,8 +354,7 @@ async def _route_callback(
         await handle_records_callback(update, context)
     elif data.startswith("mp:"):
         await _handle_month_pick_callback(update, context)
-    else:
-        await query.answer("Unknown action.")
+# SaaS features are now bridged via pro.saas_bridge
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +420,7 @@ def main() -> None:
 
     app.add_handler(CommandHandler("stats",  _stats))
     app.add_handler(CommandHandler("budget", _budget))
+    app.add_handler(CommandHandler("upgrade", handle_upgrade_command))
 
     # --- Admin ---
     app.add_handler(CommandHandler("admin_upgrade", _handle_admin_upgrade))
@@ -446,6 +452,7 @@ def main() -> None:
             BotCommand("fixedexp",  "Manage fixed expenses"),
             BotCommand("stats",     "Spending trends ⭐ Pro"),
             BotCommand("budget",    "Category budgets ⭐ Pro"),
+            BotCommand("upgrade",   "Get NutSplit Pro ($4.99/mo)"),
             BotCommand("settings",  "Household settings"),
             BotCommand("start",     "Household onboarding"),
             BotCommand("help",      "Show all commands"),
@@ -453,6 +460,9 @@ def main() -> None:
         ])
 
     app.post_init = _set_commands
+
+    if init_saas:
+        init_saas(app)
 
     logger.info("SplitBot starting — polling for updates...")
     app.run_polling(allowed_updates=["message", "callback_query"])

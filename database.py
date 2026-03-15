@@ -155,6 +155,16 @@ def init_db() -> None:
         conn.commit()
 
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS ocr_usage (
+                group_id TEXT NOT NULL,
+                month TEXT NOT NULL,
+                count INTEGER NOT NULL,
+                PRIMARY KEY (group_id, month)
+            )
+        """)
+        conn.commit()
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS fixed_expense_exceptions (
                 id                  INTEGER PRIMARY KEY AUTOINCREMENT,
                 fixed_expense_id    INTEGER NOT NULL,

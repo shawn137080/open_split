@@ -1,36 +1,64 @@
-# NutSplit — Household Expense Tracker
+# 🥜 NutSplit Core — Open Source Community Edition
 
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Telegram Bot](https://img.shields.io/badge/platform-Telegram-26a5e4)
+[![Telegram Bot](https://img.shields.io/badge/platform-Telegram-26a5e4)](https://t.me/NutSplitBot)
+[![Website](https://img.shields.io/badge/website-nutsplit.app-orange)](https://nutsplit.app)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Telegram bot for splitting shared household expenses. Send a receipt photo → AI extracts the data → you choose how to split → balance tracked automatically.
+NutSplit is the frictionless AI expense tracker that lives directly inside your Telegram groups. **No app to download, no accounts to create. Just pure, organized household finance.**
 
-**Open-source & self-hostable.** A managed hosted version with extras is also available.
+> [!IMPORTANT]
+> ### 🚀 Join the Official Bot
+> The easiest way to start tracking with your roommates today is via the **[Official NutSplit Bot (@NutSplitBot)](https://t.me/NutSplitBot)**. 
+> 
+> **Why use the official bot?**
+> - ⚡ **Zero Setup**: Start in 30 seconds.
+> - 📸 **Unlimited OCR Scanning**: Gemini-powered receipt extraction.
+> - 📊 **Premium Charts**: Real-time spending trends and category budgets.
+> - 🛠 **Pro Support**: Priority bug fixes and feature updates.
 
 ---
 
-## ✨ Open Source vs Hosted
+## ✨ Features
 
-| Feature | Self-hosted (free) | Hosted Pro |
+- **📸 AI Receipt OCR**: Snap a photo and Gemini AI extracts amounts, tax, and catetories instantly.
+- **⚖️ Flexible Splits**: Equal, custom shares, or "A pays for B".
+- **📊 Pro Trends & Budgets**: Monthly visual spending charts and category budget alerts.
+- **🔄 Recurring Expenses**: Set rent and utilities once, auto-seeded every month.
+- **🔒 Privacy First**: Data lives in your group; we only store what's necessary to track your balances.
+
+---
+
+## 💎 NutSplit Pro
+
+Unlock the full power of Pip the Squirrel for just **$4.99/month**.
+
+| Feature | Free Tier | Pro Tier |
 |---|---|---|
 | Expense tracking & splitting | ✅ | ✅ |
-| Receipt OCR (Gemini Flash) | ✅ | ✅ |
-| Fixed recurring expenses | ✅ | ✅ |
-| CSV export | ✅ | ✅ |
-| Monthly records & summaries | ✅ | ✅ |
-| Monthly spending trends `/stats` | — | ✅ |
-| Budget alerts | — | ✅ |
-| Cloud DB backup | — | ✅ |
-| Zero-ops setup | — | ✅ |
-| Priority support | — | ✅ |
+| Receipt OCR (Gemini AI) | 10 scans/mo | **Unlimited** |
+| Spending trends `/stats` | — | ✅ |
+| Budget alerts `/budget` | — | ✅ |
+| Export Data (CSV) | ✅ | ✅ |
 
-> Self-hosting takes ~10 minutes. See setup instructions below.
+> **Upgrading is easy**: Just run the `/upgrade` command directly inside the Telegram Bot.
 
 ---
 
-## 🚀 Deploy
+## 🛠 Open Core & Self-Hosting
 
-### Option 1 — Railway (one-click, recommended)
+NutSplit follows an **Open Core** model. We believe in transparency and empowering the developer community. You can review our core logic, contribute features, or run a limited private instance.
+
+### 📜 What is Open Source?
+- **Core Orchestration**: Our Telegram message routing and state management.
+- **AI Prompting**: The logic behind our receipt extraction and NL routing.
+- **Math Engine**: All balance calculations and settlement algorithms.
+
+### 🔒 NutSplit Pro (Closed Source)
+The official SaaS infrastructure (Stripe integrations, advanced visual analytics, and automated multi-tenant scaling) is maintained in a private repository to support the sustainable development of this project. 
+
+> **[Try NutSplit Pro for $4.99/mo](https://t.me/NutSplitBot)**
+
+### Option 1 — Railway (one-click)
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/shawn137080/nutsplit)
 

@@ -542,9 +542,29 @@ async def handle_photo(
     # Determine MIME type — Telegram photos are always JPEG
     mime_type = "image/jpeg"
 
+    # --- SaaS Gating: Check Pro status and monthly OCR usage ---
+    from main import IS_PRO  # Global override
+    is_pro_group = database.is_group_pro(group_id)
+    
+    if not (IS_PRO or is_pro_group):
+        usage = database.get_ocr_count(group_id)
+        if usage >= 10:
+            await processing_msg.edit_text(
+                "⚠️ **Monthly Limit Reached**\n\n"
+                "You've used your 10 free receipt scans this month. "
+                "Upgrade to **NutSplit Pro** for unlimited AI scanning, spending trends, and category budgets!\n\n"
+                "Run /upgrade to unlock everything. 🥜",
+                parse_mode="Markdown"
+            )
+            database.clear_state(user_id, group_id)
+            return
+
     # Call Gemini extraction
     try:
         extracted = extract_receipt(bytes(image_bytes), mime_type)
+        # Increment usage if NOT pro
+        if not (IS_PRO or is_pro_group):
+            database.increment_ocr_count(group_id)
     except Exception as exc:
         logger.exception("Receipt extraction failed: %s", exc)
         await processing_msg.edit_text(
