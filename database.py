@@ -49,6 +49,7 @@ def init_db() -> None:
                 timezone        TEXT NOT NULL DEFAULT 'America/Toronto',
                 currency        TEXT NOT NULL DEFAULT 'CAD',
                 default_tax_pct REAL NOT NULL DEFAULT 0.0,
+                is_pro          INTEGER NOT NULL DEFAULT 0,
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -132,13 +133,26 @@ def init_db() -> None:
             ("start_month",    "TEXT"),
             ("end_month",      "TEXT"),
             ("default_tax_pct", "REAL NOT NULL DEFAULT 0.0"),
+            ("is_pro",         "INTEGER NOT NULL DEFAULT 0"),
         ]:
-            table = "groups" if col == "default_tax_pct" else "fixed_expenses"
+            table = "groups" if col in ("default_tax_pct", "is_pro") else "fixed_expenses"
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_def}")
                 conn.commit()
             except Exception:
                 pass  # column already exists — safe to ignore
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS budgets (
+                group_id      TEXT NOT NULL,
+                category      TEXT NOT NULL,
+                amount        REAL NOT NULL,
+                updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (group_id, category),
+                FOREIGN KEY (group_id) REFERENCES groups(group_id)
+            )
+        """)
+        conn.commit()
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS fixed_expense_exceptions (
@@ -233,6 +247,83 @@ def update_group(
         conn.commit()
     finally:
         conn.close()
+
+
+def enable_pro(group_id: str, is_pro: int = 1) -> None:
+    """Enable or disable Pro mode for a group."""
+    conn = _connect()
+    try:
+        conn.execute("UPDATE groups SET is_pro = ? WHERE group_id = ?", (is_pro, group_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def is_group_pro(group_id: str) -> bool:
+    """Check if a group has Pro mode enabled."""
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT is_pro FROM groups WHERE group_id = ?", (group_id,)).fetchone()
+        result = bool(row and row["is_pro"])
+    finally:
+        conn.close()
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Budgets
+# ---------------------------------------------------------------------------
+
+def set_budget(group_id: str, category: str, amount: float) -> None:
+    """Set or update a monthly budget limit for a category."""
+    conn = _connect()
+    try:
+        conn.execute(
+            """
+            INSERT INTO budgets (group_id, category, amount)
+            VALUES (?, ?, ?)
+            ON CONFLICT(group_id, category) DO UPDATE SET
+                amount = excluded.amount,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (group_id, category, amount),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_budget(group_id: str, category: str) -> float | None:
+    """Get the budget for a specific category, or None if not set."""
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT amount FROM budgets WHERE group_id = ? AND category = ?",
+            (group_id, category),
+        ).fetchone()
+        result = float(row["amount"]) if row else None
+    finally:
+        conn.close()
+    return result
+
+
+def get_all_budgets(group_id: str) -> list[dict]:
+    """Get all budgets for a group."""
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM budgets WHERE group_id = ?",
+            (group_id,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            if r:
+                d = _row_to_dict(r)
+                if d is not None:
+                    result.append(d)
+    finally:
+        conn.close()
+    return result
 
 
 def group_exists(group_id: str) -> bool:

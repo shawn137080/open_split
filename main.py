@@ -21,7 +21,7 @@ from telegram.ext import (
 )
 
 import database
-from config import IS_PRO, TELEGRAM_TOKEN
+from config import IS_PRO, TELEGRAM_TOKEN, ADMIN_TELEGRAM_ID
 from pro.stats_flow import handle_stats_command
 from pro.budget_flow import handle_budget_command
 from workflows.manual_expense_flow import (
@@ -192,10 +192,29 @@ async def _handle_cancel(
         await update.effective_message.reply_text("Nothing to cancel.")
 
 
+async def _handle_admin_upgrade(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Hidden command to upgrade a group to Pro."""
+    if not update.effective_user or not update.effective_message:
+        return
+    user_id = str(update.effective_user.id)
+    if not ADMIN_TELEGRAM_ID or user_id != str(ADMIN_TELEGRAM_ID):
+        await update.effective_message.reply_text("⛔ Unauthorized.")
+        return
+    
+    if not context.args:
+        await update.effective_message.reply_text("Usage: /admin_upgrade <group_id>")
+        return
+        
+    target_group = context.args[0]
+    database.enable_pro(target_group, 1)
+    await update.effective_message.reply_text(f"✅ Group {target_group} upgraded to Pro.")
+
+
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
-
 
 async def _route_text_message(
     update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -234,6 +253,8 @@ async def _route_text_message(
                 loop = asyncio.get_running_loop()
                 intent = await loop.run_in_executor(None, route_intent, text)
                 
+                pro_active = IS_PRO or database.is_group_pro(group_id)
+
                 if intent == "summary":
                     await handle_summary_command(update, context)
                 elif intent == "history":
@@ -241,9 +262,9 @@ async def _route_text_message(
                 elif intent == "owe":
                     await handle_owe_command(update, context)
                 elif intent == "stats":
-                    await handle_stats_command(update, context)
+                    await handle_stats_command(update, context, is_pro=pro_active)
                 elif intent == "budget":
-                    await handle_budget_command(update, context)
+                    await handle_budget_command(update, context, is_pro=pro_active)
                 elif intent == "export":
                     await handle_export_command(update, context)
                 elif intent == "fixed":
@@ -384,10 +405,19 @@ def main() -> None:
     app.add_handler(CommandHandler("feedback", handle_feedback))
 
     # --- Pro features ---
-    async def _stats(u, c): await handle_stats_command(u, c, is_pro=IS_PRO)
-    async def _budget(u, c): await handle_budget_command(u, c, is_pro=IS_PRO)
+    async def _stats(u, c):
+        gid = str(u.effective_chat.id) if u.effective_chat else ""
+        await handle_stats_command(u, c, is_pro=(IS_PRO or database.is_group_pro(gid)))
+
+    async def _budget(u, c):
+        gid = str(u.effective_chat.id) if u.effective_chat else ""
+        await handle_budget_command(u, c, is_pro=(IS_PRO or database.is_group_pro(gid)))
+
     app.add_handler(CommandHandler("stats",  _stats))
     app.add_handler(CommandHandler("budget", _budget))
+
+    # --- Admin ---
+    app.add_handler(CommandHandler("admin_upgrade", _handle_admin_upgrade))
 
     # --- Photo (receipt scanning) ---
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
