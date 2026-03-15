@@ -22,13 +22,10 @@ from telegram.ext import (
 
 import database
 from config import IS_PRO, TELEGRAM_TOKEN, ADMIN_TELEGRAM_ID, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-from workflows.upgrade_flow import handle_upgrade_command
 try:
     from pro.saas_bridge import init_saas
 except ImportError:
     init_saas = None  # type: ignore
-from pro.stats_flow import handle_stats_command
-from pro.budget_flow import handle_budget_command
 from workflows.manual_expense_flow import (
     handle_add_callback,
     handle_add_command,
@@ -153,10 +150,9 @@ _HELP_TEXT = (
     "/add_fixed — add a recurring monthly expense\n"
     "/fixedexp — view & manage fixed expenses\n"
     "\n"
-    "<b>Pro features</b>\n"
-    "/upgrade — Get NutSplit Pro ($4.99/mo)\n"
-    "/stats — spending trends (⭐ Pro)\n"
-    "/budget — category budget limits (⭐ Pro)\n"
+    "<b>Community Edition</b>\n"
+    "This is the free open-source core. For unlimited AI scanning and premium features, check out:\n"
+    "🚀 <b><a href='https://t.me/NutSplitBot'>Official NutSplit Pro</a></b>"
     "\n"
     "<b>Setup</b>\n"
     "/start — household onboarding\n"
@@ -267,10 +263,13 @@ async def _route_text_message(
                     await handle_history_command(update, context)
                 elif intent == "owe":
                     await handle_owe_command(update, context)
-                elif intent == "stats":
-                    await handle_stats_command(update, context, is_pro=pro_active)
-                elif intent == "budget":
-                    await handle_budget_command(update, context, is_pro=pro_active)
+                elif intent in ("stats", "budget", "upgrade"):
+                    await update.effective_message.reply_text(
+                        "🚀 <b>NutSplit Pro Feature</b>\n\n"
+                        "Visual stats and budgets are available in our official hosted version. "
+                        "Join thousands of users at @NutSplitBot!",
+                        parse_mode="HTML"
+                    )
                 elif intent == "export":
                     await handle_export_command(update, context)
                 elif intent == "fixed":
@@ -409,18 +408,18 @@ def main() -> None:
     app.add_handler(CommandHandler("records",  handle_records_command))
     app.add_handler(CommandHandler("feedback", handle_feedback))
 
-    # --- Pro features ---
-    async def _stats(u, c):
-        gid = str(u.effective_chat.id) if u.effective_chat else ""
-        await handle_stats_command(u, c, is_pro=(IS_PRO or database.is_group_pro(gid)))
+    # --- Pro teaser ---
+    async def _pro_teaser(u, c):
+        await u.effective_message.reply_text(
+            "🚀 <b>NutSplit Pro</b>\n\n"
+            "This feature (visual stats, budgets, and unlimited AI OCR) is available in our official hosted version.\n\n"
+            "👉 <b><a href='https://t.me/NutSplitBot'>Try it here!</a></b>",
+            parse_mode="HTML"
+        )
 
-    async def _budget(u, c):
-        gid = str(u.effective_chat.id) if u.effective_chat else ""
-        await handle_budget_command(u, c, is_pro=(IS_PRO or database.is_group_pro(gid)))
-
-    app.add_handler(CommandHandler("stats",  _stats))
-    app.add_handler(CommandHandler("budget", _budget))
-    app.add_handler(CommandHandler("upgrade", handle_upgrade_command))
+    app.add_handler(CommandHandler("stats",   _pro_teaser))
+    app.add_handler(CommandHandler("budget",  _pro_teaser))
+    app.add_handler(CommandHandler("upgrade", _pro_teaser))
 
     # --- Admin ---
     app.add_handler(CommandHandler("admin_upgrade", _handle_admin_upgrade))
