@@ -216,7 +216,6 @@ async def _route_text_message(
     elif is_settings_state(user_id, group_id):
         await handle_settings_message(update, context)
     else:
-        # Check for add-fixed / fixedexp-edit text input
         state_row = database.get_state(user_id, group_id)
         if state_row and state_row.get("state") in (
             STATE_ADDFIXED_STARTMONTH,
@@ -225,6 +224,32 @@ async def _route_text_message(
             STATE_FIXEDEXP_EDIT_AMOUNT,
         ):
             await handle_add_fixed_message(update, context)
+        else:
+            # Fallback to natural language routing via LLM
+            text = update.effective_message.text
+            if text and not text.startswith("/"):
+                # Run the synchronous LLM call in a thread pool to avoid blocking the event loop
+                import asyncio
+                from tools.llm_router import route_intent
+                loop = asyncio.get_running_loop()
+                intent = await loop.run_in_executor(None, route_intent, text)
+                
+                if intent == "summary":
+                    await handle_summary_command(update, context)
+                elif intent == "history":
+                    await handle_history_command(update, context)
+                elif intent == "owe":
+                    await handle_owe_command(update, context)
+                elif intent == "stats":
+                    await handle_stats_command(update, context)
+                elif intent == "budget":
+                    await handle_budget_command(update, context)
+                elif intent == "export":
+                    await handle_export_command(update, context)
+                elif intent == "fixed":
+                    await handle_fixedexp_command(update, context)
+                elif intent == "help":
+                    await _handle_help(update, context)
 
 
 async def _handle_month_pick_callback(
